@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<title>内销开票核对工具</title>
+<script>
+// 版本自检：每次加载时检查 version.json，发现新版本则强制刷新（解决模块映射表缓存）
+(function() {
+  var KEY = 'slhy_v4_ver';
+  fetch('version.json?_=' + Date.now()).then(function(r) { return r.json(); }).then(function(v) {
+    var cached = localStorage.getItem(KEY);
+    if (cached && cached !== v.version) {
+      localStorage.removeItem(KEY);
+      // 清除所有缓存存储
+      try { caches && caches.keys && caches.keys().then(function(ks) { ks.forEach(function(k) { caches.delete(k); }); }); } catch(e) {}
+      location.reload(true);
+    }
+    localStorage.setItem(KEY, v.version);
+  }).catch(function() {});
+})();
+</script>
+<link href="vendor/bootstrap.min.css" rel="stylesheet">
+<style>/* Design System — Minimal White（纯白极简）: 白/灰/蓝三层，品牌蓝唯一高饱和信号 */
+:root {
+  /* 颜色 */
+  --color-bg:            #f7f8fa;
+  --color-surface:       #ffffff;
+  --color-border:        #eef1f5;   /* 低对比细边框 */
+  --color-border-strong: #e2e8f0;   /* 表格分隔线/输入框 */
+  --color-divider:       #f1f4f8;   /* 表身行间线 */
+  --color-placeholder:   #94a3b8;
+  --color-text-dim:      #64748b;
+  --color-text:          #334155;
+  --color-heading:       #0f172a;
+  --color-bg-soft:       #f8fafc;   /* 修复 mode-picker 引用 */
+
+  /* 品牌蓝 */
+  --color-primary:       #2563eb;
+  --color-primary-hover: #1d4ed8;
+  --color-primary-active:#1e40af;
+  --color-primary-deep:  #1e3a8a;
+  --color-primary-lt:    #eff6ff;
+  --color-primary-100:   #dbeafe;
+  --color-primary-200:   #bfdbfe;
+
+  /* 语义色（+文字级） */
+  --color-success:     #10b981;  --color-success-text:#047857;
+  --color-danger:      #ef4444;  --color-danger-text: #b91c1c;
+  --color-warning:     #d97706;  --color-warning-text:#b45309;
+  --color-success-lt:  #ecfdf5;
+  --color-danger-lt:   #fef2f2;
+  --color-warning-lt:  #fff7e6;
+
+  /* 表格行 */
+  --color-row-alt:     #f7f9fc;
+
+  /* 间距阶梯 */
+  --space-1:.25rem; --space-2:.5rem; --space-3:.75rem;
+  --space-4:1rem;   --space-5:1.5rem; --space-6:2rem;
+
+  /* 圆角 / 阴影 / 过渡 */
+  --radius-sm:8px; --radius-md:12px; --radius-lg:16px;
+  --shadow-sm: 0 1px 2px rgba(15,23,42,.04);
+  --shadow-md: 0 8px 24px rgba(15,23,42,.06);
+  --t-fast:120ms; --t-slow:200ms;
+  --ease: cubic-bezier(.4,0,.2,1);
+
+  /* Bootstrap 覆盖（对齐品牌蓝） */
+  --bs-primary:#2563eb; --bs-link-color:#2563eb;
+  --bs-modal-border-radius:16px; --bs-modal-border-width:1px;
+}
+
+/* 全局 code 标签：覆盖浏览器/ Bootstrap 默认红色，覆盖为品牌蓝 +无底色 */
+code { color: var(--color-primary); background: transparent; padding: 0; font-size: inherit; }
+
+* { box-sizing: border-box; }
+body {
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", "微软雅黑", sans-serif;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  font-size: .875rem;
+}
+
+/* 键盘焦点（统一） */
+:focus-visible { outline: 2px solid var(--color-primary-200); outline-offset: 2px; }
+
+.topbar {
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+  padding: 0 2rem;
+  height: 56px;
+  display: flex; align-items: center; justify-content: space-between;
+  position: sticky; top: 0; z-index: 100;
+}
+.topbar-logo { display: flex; align-items: center; gap: 10px; }
+.topbar-logo .dot {
+  width: 32px; height: 32px; border-radius: 9px;
+  background: linear-gradient(135deg, var(--color-primary), #4f46e5);
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 2px 8px rgba(37,99,235,.25);
+}
+.topbar-logo span { font-weight: 600; font-size: .95rem; letter-spacing: -.3px; color: var(--color-heading); }
+.topbar-badge {
+  font-size: .72rem; color: var(--color-text-dim);
+  background: transparent; border: 1px solid var(--color-border);
+  padding: 3px 12px; border-radius: 20px;
+}
+
+.container-main { max-width: 1280px; margin: 0 auto; padding: 2rem 1.5rem 4rem; }
+
+/* ── 卡片式步骤条（v5 框架重设计）── */
+.stepper { display: flex; gap: 10px; margin-bottom: 2rem; }
+.stepper-step { flex: 1; display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-radius: 12px; border: 1.5px solid var(--color-border); background: var(--color-surface); cursor: pointer; transition: border-color var(--t-fast), background var(--t-fast); min-width: 0; }
+/* hover：保留蓝色预览作为可点击反馈（非当前步骤悬停时短暂变蓝，离开恢复灰色） */
+.stepper-step:hover { border-color: var(--color-primary); background: var(--color-primary-lt); }
+.stepper-step:hover .stepper-num { background: var(--color-primary); color: #fff; }
+.stepper-step:hover .stepper-label { color: var(--color-primary); }
+.stepper-step:hover .stepper-label small { color: var(--color-primary-200); }
+.stepper-num { width: 32px; height: 32px; border-radius: 9px; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 1.05rem; background: var(--color-bg-soft); color: var(--color-text-dim); flex: none; }
+/* 当前激活：蓝底白数字 + 蓝色阴影 */
+.stepper-step.active { border-color: var(--color-primary); background: var(--color-primary-lt); box-shadow: 0 4px 14px rgba(37,99,235,.12); }
+.stepper-step.active .stepper-num { background: var(--color-primary); color: #fff; }
+.stepper-label { display: flex; flex-direction: column; font-size: 1.05rem; font-weight: 700; color: var(--color-text-dim); line-height: 1.25; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.stepper-label small { font-size: 11px; color: var(--color-placeholder); font-weight: 400; }
+.stepper-step.active .stepper-label { color: var(--color-primary); }
+.stepper-step.active .stepper-label small { color: var(--color-primary-200); }
+/* .done 状态保留 class（JS 仍设置），但 CSS 上 = 默认灰色态：白底灰边灰数字灰标题，无任何蓝色 */
+.stepper-line { display: none; }
+
+.card-panel {
+  background: var(--color-surface);
+  border-radius: var(--radius-lg);
+  padding: 2rem;
+  box-shadow: var(--shadow-sm);
+  margin-bottom: 1.5rem;
+  border: 1px solid var(--color-border);
+}
+.card-panel h2 { font-size: 1.05rem; font-weight: 700; margin: 0 0 .2rem; letter-spacing: -.2px; color: var(--color-heading); }
+.card-panel .subtitle { font-size: .8rem; color: var(--color-text-dim); margin-bottom: 1.5rem; }
+.card-panel .card-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding-bottom: .75rem; margin-bottom: 1rem; border-bottom: 1px solid var(--color-border);
+}
+
+/* 模式选择：横向大卡（v5 框架重设计） */
+.mode-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: .8rem; }
+@media (max-width: 640px) { .mode-row { grid-template-columns: 1fr; } }
+.mode-btn { border: 1.5px solid var(--color-border); border-radius: 12px; padding: 20px 18px; background: var(--color-surface); cursor: pointer; display: flex; align-items: center; gap: 14px; text-align: left; transition: border-color var(--t-fast), box-shadow var(--t-fast), transform var(--t-fast); }
+.mode-btn:hover { border-color: var(--color-primary); background: var(--color-primary-lt); box-shadow: var(--shadow-sm); }
+.mode-btn:hover .mi { background: var(--color-surface); }
+.mode-btn:hover .mt b { color: var(--color-primary); }
+.mode-btn.hot { border-color: var(--color-primary); background: var(--color-primary-lt); }
+.mode-btn .mi { width: 48px; height: 48px; border-radius: 13px; background: var(--color-primary-100); display: flex; align-items: center; justify-content: center; flex: none; }
+.mode-btn.hot .mi { background: var(--color-surface); }
+.mode-btn .mt { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.mode-btn .mt b { font-size: 14.5px; font-weight: 800; color: var(--color-heading); }
+.mode-btn.hot .mt b { color: var(--color-primary); }
+.mode-btn .mt small { font-size: 12px; color: var(--color-text-dim); font-weight: 400; line-height: 1.4; }
+.mode-btn .arrow { margin-left: auto; flex: none; color: var(--color-placeholder); display: flex; }
+
+/* 上传板块布局：PDF 模式 3 板块横排 3 等分（grid-3，默认）；手动模式 2 板块居中（grid-2） */
+.upload-grid { display: grid; gap: 1rem; }
+.upload-grid.grid-3 { grid-template-columns: repeat(3, 1fr); }
+.upload-grid.grid-2 { display: flex; flex-wrap: wrap; justify-content: center; }
+.upload-grid.grid-2 .upload-zone { flex: 0 1 320px; }
+@media (max-width: 768px) {
+  .upload-grid.grid-3 { grid-template-columns: 1fr; }
+  .upload-grid.grid-2 { flex-direction: column; align-items: center; }
+  .upload-grid.grid-2 .upload-zone { width: 100%; max-width: 360px; }
+}
+.upload-zone {
+  border: 2px dashed var(--color-border); border-radius: var(--radius-md); padding: 2rem 1rem;
+  text-align: center; cursor: pointer; transition: border-color var(--t-fast) var(--ease), background var(--t-fast) var(--ease);
+  background: #fff;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  min-height: 170px; position: relative;
+}
+.upload-zone:hover { border-color: var(--color-primary-200); background: #fafbfc; }
+.upload-zone.dragover { border-color: var(--color-primary); background: var(--color-primary-lt); transform: scale(1.01); }
+.upload-zone.has-file { border: 1.5px solid var(--color-primary); border-style: solid; background: #fff; }
+.upload-zone .zone-icon { width: 52px; height: 52px; margin: 0 auto 10px; border-radius: 14px; background: var(--color-primary-lt); display: flex; align-items: center; justify-content: center; font-size: 1.5rem; opacity: 1; }
+.upload-zone .zone-title { font-weight: 600; font-size: .9rem; color: var(--color-text); }
+.upload-zone .zone-hint { font-size: .75rem; color: var(--color-text-dim); margin-top: .25rem; }
+.upload-zone .zone-files { font-size: .8rem; margin-top: .5rem; max-height: 80px; overflow-y: auto; }
+.upload-zone .zone-files .zf-item {
+  color: var(--color-primary); display: flex; align-items: center; gap: 6px;
+  justify-content: center; line-height: 1.4; margin: 2px 0; font-size: .75rem;
+}
+.zf-del {
+  flex: none; width: 24px; height: 24px; border-radius: 50%;
+  border: none; background: var(--color-danger); color: #fff;
+  font-weight: 700; font-size: 15px; line-height: 1; padding: 0; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+  transition: background var(--t-fast);
+}
+.zf-del:hover { background: var(--color-danger-text); }
+
+.btn-go {
+  background: var(--color-primary); color: #fff; border: none; padding: .65rem 1.5rem;
+  border-radius: var(--radius-sm); font-weight: 600; font-size: .875rem; cursor: pointer;
+  transition: background var(--t-fast) var(--ease);
+}
+.btn-go:hover { background: var(--color-primary-hover); }
+.btn-go:active { background: var(--color-primary-active); }
+.btn-go:disabled { opacity: .45; cursor: not-allowed; }
+.btn-secondary {
+  background: var(--color-primary-lt); color: var(--color-primary); border: none; padding: .55rem 1.5rem;
+  border-radius: var(--radius-sm); font-weight: 600; font-size: .88rem; cursor: pointer;
+  transition: background var(--t-fast) var(--ease);
+}
+.btn-secondary:hover { background: var(--color-primary-100); }
+.btn-outline {
+  background: #fff; color: var(--color-text); border: 1px solid var(--color-border);
+  padding: .6rem 1.5rem; border-radius: var(--radius-sm); font-weight: 500; cursor: pointer;
+  transition: border-color var(--t-fast) var(--ease), color var(--t-fast) var(--ease);
+  font-size: .9rem;
+}
+.btn-outline:hover { border-color: var(--color-primary); color: var(--color-primary); }
+
+.progress-panel { margin-bottom: 1.5rem; }
+.progress-item { margin-bottom: 1rem; }
+.progress-item .pi-header { display: flex; justify-content: space-between; margin-bottom: 0.35rem; font-size: 0.9rem; }
+.progress-item .pi-label { font-weight: 600; color: var(--color-text); }
+.progress-item .pi-pct { color: var(--color-text-dim); font-size: 0.8rem; }
+.progress-item .pi-detail { font-size: 0.8rem; color: var(--color-text-dim); margin-bottom: 0.5rem; }
+.progress-bar-wrap {
+  height: 12px;
+  background: var(--color-border);
+  border-radius: 6px;
+  overflow: hidden;
+  position: relative;
+}
+.progress-bar-fill {
+  height: 100%; border-radius: 6px;
+  transition: width 400ms ease-out;
+  will-change: width;
+}
+/* 运行中：品牌蓝 + 极淡斜条纹流动 */
+.progress-bar-fill.running {
+  background-color: var(--color-primary);
+  background-image: repeating-linear-gradient(
+    -45deg,
+    rgba(255, 255, 255, 0.14) 0 10px,
+    rgba(255, 255, 255, 0) 10px 20px
+  );
+  background-size: 200% 100%;
+  animation: progress-flow 1.2s linear infinite;
+}
+.progress-bar-fill.done { background: var(--color-success); background-image: none; }
+
+/* 流动条纹：真实进度尚未到来 / 疑似卡住时使用 */
+.progress-bar-fill.indeterminate {
+  background-color: var(--color-primary);
+  background-image: repeating-linear-gradient(
+    -45deg,
+    rgba(255, 255, 255, 0.14) 0 10px,
+    rgba(255, 255, 255, 0) 10px 20px
+  );
+  background-size: 200% 100%;
+  animation: progress-flow 1.2s linear infinite;
+}
+/* 未开始的条：微光呼吸 */
+.progress-bar-fill.waiting {
+  background: var(--color-primary-100);
+  animation: waiting-glow 2s ease-in-out infinite;
+}
+/* 百分数文字 */
+.progress-bar-center-pct {
+  position: absolute;
+  left: 0; top: 50%;
+  transform: translate(-50%, -50%);
+  color: #fff;
+  font-size: .7rem;
+  font-weight: 600;
+  letter-spacing: .1px;
+  pointer-events: none;
+  z-index: 1;
+  transition: left 400ms ease-out;
+}
+@keyframes progress-flow {
+  from { background-position: 0 0; }
+  to   { background-position: 28px 0; }
+}
+@keyframes waiting-glow {
+  0%, 100% { opacity: 0.5; }
+  50%      { opacity: 1; }
+}
+
+.table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; border-radius: var(--radius-sm); border: 1px solid var(--color-border); }
+.table-wrap::-webkit-scrollbar { height: 8px; }
+.table-wrap::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 4px; }
+/* 对比核对表格：结果/规格型号/合同/送货单/发票/说明
+   四条分隔线（合同-名称/送货-名称/发票-名称/说明 前）全部向上拉穿，
+   颜色粗细与表格外框（var(--color-border-strong)）一致。
+   表身用 class 定位（col-c1/d1/p1/rsn），避免聚合行 td 数不同导致 nth-child 错位 */
+#compare-table td.col-c1,
+#compare-table td.col-d1,
+#compare-table td.col-p1,
+#compare-table td.col-rsn,
+#compare-table .col-head-row th:nth-child(1),
+#compare-table .col-head-row th:nth-child(6),
+#compare-table .col-head-row th:nth-child(12),
+#compare-table .section-head-row th:nth-child(3),
+#compare-table .section-head-row th:nth-child(4),
+#compare-table .section-head-row th:nth-child(5),
+#compare-table .section-head-row th:nth-child(6) {
+  border-left: 1px solid var(--color-border-strong) !important;
+}
+#compare-table th.section-header { background: #f5f9ff; }
+.table-wrap table { margin: 0; font-size: .8rem; width: 100%; border-collapse: collapse; }
+.table-wrap thead { position: sticky; top: 0; z-index: 2; }
+.table-wrap th {
+  background: #fafbfc; color: var(--color-text-dim); font-weight: 600; font-size: .75rem;
+  padding: .6rem .5rem; text-align: center; border-bottom: 1px solid var(--color-border);
+  white-space: nowrap; letter-spacing: .02em;
+}
+.table-wrap th.section-header {
+  background: #f5f9ff; color: var(--color-primary); font-size: .75rem; letter-spacing: .3px;
+}
+.table-wrap td {
+  padding: .55rem .6rem; text-align: center; border-bottom: 1px solid var(--color-divider);
+  vertical-align: middle; white-space: nowrap; font-variant-numeric: tabular-nums;
+}
+.table-wrap tbody tr:hover { background: var(--color-primary-lt); }
+.group-header-row th { background: #fafbfc !important; font-size: .9rem; }
+.row-mapped { background: var(--color-primary-lt); }
+.row-unmapped { background: var(--color-danger-lt); }
+.row-wait { background: #fff; }
+
+.badge-sm {
+  display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: .72rem;
+  font-weight: 600; letter-spacing: .01em;
+}
+.badge-ok     { background: var(--color-success-lt); color: var(--color-success-text); }
+.badge-warn   { background: var(--color-warning-lt); color: var(--color-warning-text); }
+.badge-wait   { background: var(--color-bg-soft); color: var(--color-text-dim); }
+.badge-danger { background: var(--color-danger-lt); color: var(--color-danger-text); }
+.badge-info   { background: var(--color-primary-lt); color: #1d4ed8; }
+.badge-unk    { background: var(--color-warning-lt); color: var(--color-warning-text); border: 1px solid #fbbf24; }
+
+.stat-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 1rem; margin-bottom: 1rem; }
+.stat-item {
+  background: var(--color-surface); border-radius: var(--radius-md); padding: 16px 12px;
+  display: flex; align-items: center; gap: 12px; border: 1px solid var(--color-border);
+  text-align: left;
+}
+.stat-item .si { width: 40px; height: 40px; border-radius: 11px; display: flex; align-items: center; justify-content: center; flex: none; }
+/* 方案 A：状态卡实色填充 + 白字（0 也实色） */
+.stat-item.s-pass { background: #10b981; border-color: #10b981; }
+.stat-item.s-fail { background: #ef4444; border-color: #ef4444; }
+.stat-item.s-warn { background: #f59e0b; border-color: #f59e0b; }
+.stat-item.s-info { background: #2563eb; border-color: #2563eb; }
+.stat-item.s-pass .si, .stat-item.s-fail .si, .stat-item.s-warn .si, .stat-item.s-info .si { background: rgba(255,255,255,.18); }
+.stat-item .stat-val { font-size: 1.85rem; font-weight: 800; letter-spacing: -.5px; line-height: 1.1; color: var(--color-heading); font-variant-numeric: tabular-nums; }
+.stat-item .stat-lbl { font-size: .85rem; color: var(--color-text-dim); margin-top: 1px; }
+.stat-item.s-pass, .stat-item.s-fail, .stat-item.s-warn, .stat-item.s-info { color: #fff; }
+.stat-item.s-pass .stat-val, .stat-item.s-fail .stat-val, .stat-item.s-warn .stat-val, .stat-item.s-info .stat-val { color: #fff; }
+.stat-item.s-pass .stat-lbl, .stat-item.s-fail .stat-lbl, .stat-item.s-warn .stat-lbl, .stat-item.s-info .stat-lbl { color: rgba(255,255,255,.85); }
+.stat-item.s-total { background: var(--color-surface); border: 1px solid var(--color-border); }
+.stat-item.s-total .si { background: var(--color-bg-soft); }
+.stat-item.s-total .stat-val { color: var(--color-heading); }
+.stat-item.s-total .stat-lbl { color: var(--color-text-dim); }
+
+.cell-editable {
+  min-width: 40px; display: inline-block; border-bottom: 1px dashed transparent; padding: 2px 4px;
+  border-radius: 4px; cursor: text;
+}
+.cell-editable:hover {
+  background: var(--color-bg-soft);
+  border-bottom-color: var(--color-placeholder);
+}
+.cell-editable:focus {
+  outline: none;
+  background: var(--color-primary-lt);
+  border-bottom: 2px solid var(--color-primary);
+}
+td.cell-generic span.cell-editable,
+td.cell-generic {
+  background: var(--color-warning-lt);
+  color: #92400e;
+  font-weight: 600;
+}
+td.cell-generic span.cell-editable:hover { background: #fef3c7; }
+
+/* 新合同提示横幅（极简：白底 + 左侧警示条） */
+.banner-warn {
+  border-left: 4px solid var(--color-warning); background: #fff;
+  color: var(--color-warning-text); border-radius: 8px;
+  padding: .85rem 1rem; margin-bottom: 1rem; font-size: .88rem;
+}
+
+/* 动效克制：尊重系统减弱动效 */
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+}
+
+/* 移动端 */
+@media (max-width: 600px) {
+  .stepper-label { display: none; }
+  .stepper-line { width: 24px; }
+  .container-main { padding: 1.5rem 1rem; }
+  .card-panel { padding: 1.25rem; }
+}
+
+/* ── Step 切换：单步视图（SPA Wizard）── */
+.hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<!-- ═══ Top Bar ═══ -->
+<div class="topbar">
+  <div class="topbar-logo">
+    <div class="dot">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M3 9h18M8 15h5"/></svg>
+    </div>
+    <span>内销开票核对工具</span>
+  </div>
+  <div class="topbar-badge">合同 · 送货单 · 形式发票</div>
+</div>
+
+
+<div class="container-main">
+
+  <!-- ═══ Stepper（卡片式）═══ -->
+  <div class="stepper" id="stepper">
+    <div class="stepper-step active" data-step="1"><div class="stepper-num">1</div><span class="stepper-label">映射<small>选择数据源</small></span></div>
+    <div class="stepper-step" data-step="2"><div class="stepper-num">2</div><span class="stepper-label">上传<small>拖入单据</small></span></div>
+    <div class="stepper-step" data-step="3"><div class="stepper-num">3</div><span class="stepper-label">识别<small>AI 提取</small></span></div>
+    <div class="stepper-step" data-step="4"><div class="stepper-num">4</div><span class="stepper-label">对比核对<small>核对结果</small></span></div>
+  </div>
+
+  <!-- ═══ Step 0: 映射表 ═══ -->
+  <div class="card-panel" id="step0" data-step-panel="1">
+    <h2><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;margin-right:6px"><path d="M3 3v18h18"/><path d="M7 15l4-6 4 4 5-8"/></svg>上传映射表</h2>
+    <p class="subtitle">上传 <strong>合同台账.xlsx</strong> 作为映射表（不是合同 PDF —— 合同 PDF 不需要上传，核对只需台账+送货单+发票）</p>
+    <div id="mapping-panel">
+      <div id="mapping-list" style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap">
+        <span style="color:var(--color-text-dim)">已保存的台账：</span>
+        <select id="mapping-select" class="form-select" style="width:auto;min-width:200px;display:inline-block">
+          <option value="">— 请选择 —</option>
+        </select>
+        <button class="btn btn-outline-primary" onclick="uploadMappingN()" style="font-size:0.85rem"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px"><path d="M12 5v14M5 12h14"/></svg>上传新台账</button>
+        <button class="btn btn-outline-danger" id="btn-delete-mapping" onclick="deleteMapping()" style="font-size:0.85rem"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6h14z"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>删除</button>
+      </div>
+      <div id="mapping-status" style="margin-top:0.5rem;font-size:0.85rem;color:var(--color-text-dim)"></div>
+      <!-- 台账预览（上传后显示） -->
+      <div id="mapping-preview-wrap" style="margin-top:0.8rem;display:none">
+        <div style="display:flex;align-items:center;gap:0.6rem;flex-wrap:wrap">
+          <span style="font-weight:600;font-size:0.9rem;display:inline-flex;align-items:center;gap:6px"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>合同台账明细</span>
+          <label style="font-size:0.82rem;display:inline-flex;align-items:center;gap:0.3rem">
+            <input type="checkbox" id="mapping-select-all" onchange="toggleSelectAllMapping()"> 全选
+          </label>
+          <span id="mapping-selected-count" style="font-size:0.8rem;color:var(--color-text-dim)"></span>
+          <button class="btn btn-outline-primary" onclick="goUploadFromMapping()" style="font-size:0.85rem;margin-left:auto"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px"><path d="M20 6 9 17l-5-5"/></svg>确认</button>
+        </div>
+        <div class="table-wrap" style="max-height:320px;overflow-y:auto;margin-top:0.5rem">
+          <table class="table table-sm table-striped" style="font-size:0.8rem">
+            <thead><tr>
+              <th style="width:32px"></th>
+              <th>合约编号</th><th>货物</th><th>行数</th><th>总数量</th><th>单位</th>
+            </tr></thead>
+            <tbody id="mapping-preview-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- 模式选择：上传/选择映射表后弹出，决定合同来源方式 -->
+    <div id="mode-picker" class="card-panel hidden" style="margin-top:1rem;border:1.5px solid var(--color-primary);background:var(--color-bg-soft)">
+      <h2 style="margin-top:0"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;margin-right:6px"><circle cx="12" cy="12" r="9"/><path d="M16 8l-2.5 5.5L8 16l2.5-5.5z"/></svg>选择合同来源方式</h2>
+      <p class="subtitle">台账已就绪，请选择本批核对时合同信息的来源</p>
+      <div class="mode-row">
+        <button class="mode-btn" onclick="chooseManualMode()">
+          <span class="mi"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h11"/><path d="M3 12h11"/><path d="M3 19h11"/><path d="m15 4 2 2 4-4"/><path d="m15 12 2 2 4-4"/></svg></span>
+          <span class="mt"><b>手动选择合同</b><small>从台账明细勾选本次要核对的合同 · 推荐</small></span>
+          <span class="arrow"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg></span>
+        </button>
+        <button class="mode-btn" onclick="choosePdfMode()">
+          <span class="mi"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M12 18v-6"/><path d="M9 15l3 3 3-3"/></svg></span>
+          <span class="mt"><b>PDF 识别合同</b><small>上传合同 PDF，自动识别合同信息</small></span>
+          <span class="arrow"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg></span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ Step 1: Upload ═══ -->
+  <div class="card-panel hidden" id="step1" data-step-panel="2">
+    <h2><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;margin-right:6px"><path d="M21 12L12 3 3 12v9h6v-6h6v6h6z"/></svg>上传文件</h2>
+    <p class="subtitle">合同 PDF、送货单 / 形式发票各上传对应 PDF，每板块最多 10 个文件</p>
+    <div class="upload-grid grid-3">
+      <div class="upload-zone" id="zone-contract" data-type="contract">
+        <div class="zone-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M8 2h8v4H8z"/></svg></div>
+        <div class="zone-title">合同</div>
+        <div class="zone-hint">.pdf 购销合同</div>
+        <div class="zone-files" id="info-contract"></div>
+        <input type="file" accept=".pdf" hidden id="input-contract" multiple>
+      </div>
+      <div class="upload-zone" id="zone-delivery" data-type="delivery">
+        <div class="zone-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 8h14M5 12h14M5 16h8"/><path d="M3 4h18v16H3z"/></svg></div>
+        <div class="zone-title">送货单 / 验收单</div>
+        <div class="zone-hint">.pdf 每笔一单</div>
+        <div class="zone-files" id="info-delivery"></div>
+        <input type="file" accept=".pdf" hidden id="input-delivery" multiple>
+      </div>
+      <div class="upload-zone" id="zone-pi" data-type="pi">
+        <div class="zone-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M9 15l2 2 4-4"/></svg></div>
+        <div class="zone-title">形式发票 / PI</div>
+        <div class="zone-hint">.pdf 每笔一单</div>
+        <div class="zone-files" id="info-pi"></div>
+        <input type="file" accept=".pdf" hidden id="input-pi" multiple>
+      </div>
+    </div>
+    <div style="text-align:center; margin-top:1.5rem;">
+      <button class="btn-go" id="btn-upload" disabled>开始识别</button>
+    </div>
+  </div>
+
+  <!-- ═══ Progress ═══ -->
+  <div class="card-panel hidden" id="progress-panel" data-step-panel="3">
+    <h2><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;margin-right:6px"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>处理中</h2>
+    <p class="subtitle" id="progress-subtitle">正在解析文件...</p>
+    <div class="progress-panel" id="progress-steps"></div>
+  </div>
+
+  <!-- ═══ Step 2: OCR Status ═══ -->
+  <div class="card-panel hidden" id="step2" data-step-panel="3">
+    <h2><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;margin-right:6px"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>识别结果</h2>
+    <p class="subtitle">从上传文件中提取的产品行</p>
+    <div id="ocr-status" style="display:grid;grid-template-columns:repeat(3,1fr);gap:1rem"></div>
+    <div id="cno-status" style="margin-top:1.25rem"></div>
+  </div>
+
+  <!-- ═══ Step 3: Reconcile Table ═══ -->
+  <div class="card-panel hidden" id="step3" data-step-panel="4">
+    <h2><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;margin-right:6px"><path d="M3 3v18h18"/><path d="M7 15l4-6 4 4 5-8"/></svg>三流核对</h2>
+    <p class="subtitle">按 <strong>合约编号</strong> 关联合同，仅展示本合约编号对应的货物；合同 / 送货单 / 形式发票三方一致且数量 ≤ 合同即「核对无误」</p>
+    <div class="stat-row" id="stat-cards"></div>
+    <div id="new-contract-banner"></div>
+    <div class="table-wrap" id="compare-table">
+      <table>
+        <thead id="compare-thead"></thead>
+        <tbody id="compare-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ═══ 开始新的核对按钮（仅对比核对界面显示） ═══ -->
+  <div class="hidden" data-step-panel="4" style="text-align:center; margin-top:1.5rem;">
+    <button class="btn-outline" id="btn-reset"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><path d="M12 3v12m0 0 4-4m-4 4-4-4"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>开始新的核对</button>
+  </div>
+
+</div>
+
+<script>
+// 20260825n: 直接内联上传逻辑
+(function(){
+window.uploadMappingN=function(){
+var i=document.createElement('input');i.type='file';i.accept='.xlsx,.xls';i.onchange=function(){
+var f=i.files[0];if(!f)return;
+var d=f.name.replace(/\.(xlsx|xls)$/i,'').replace(/合同台账|合同/,'').trim();
+var n=prompt('请输入台账名称（如2026年台账）：',d||'');if(!n)return;
+var b=document.querySelector('#mode-picker button');
+if(b)b.disabled=true;
+var p=(window._uploadMappingFile||Promise.reject(new Error('模块加载中，请刷新页面重试')));
+p.call(null,f,n).then(function(r){
+if(!r){alert('错误：返回结果为空');return;}
+if(r.error){alert('上传失败：'+r.error);return;}
+if(!r.item){alert('错误：返回结果缺少item，完整返回='+JSON.stringify(r).slice(0,200));return;}
+if(r.error){alert('上传失败：'+r.error);return;}
+var nm=r.item.name;var cnt=Object.keys(r.parsed.ledger||{}).length;
+var s=document.getElementById('mapping-select');
+if(s){s.options.length=0;var o0=document.createElement('option');o0.value='';o0.textContent='— 请选择 —';s.appendChild(o0);
+var o=document.createElement('option');o.value=nm;o.textContent=nm+'（'+cnt+'项）';o.selected=true;s.appendChild(o);}
+window.mappingName=nm;
+if(typeof window.loadMappingsRef==='function')window.loadMappingsRef();
+if(typeof window.selectMappingRef==='function')window.selectMappingRef(nm);
+alert('✅ 上传成功！已加载 '+cnt+' 个合同，台账名称：'+nm);})
+.catch(function(e){alert('解析失败：'+e.message);})
+.finally(function(){if(b)b.disabled=false;});};i.click();};
+window._uploadMappingFile=null;
+})();
+</script>
+<script src="vendor/bootstrap.bundle.min.js?v=20260825o"></script>
+<script src="vendor/xlsx.full.min.js?v=20260825o"></script>
+<script src="vendor/tesseract.min.js?v=20260825o"></script>
+<script type="module" src="js/app-front.js?v=20260825o"></script>
+
+<!-- 手动选合同弹窗 -->
+<div class="modal fade" id="contract-picker-modal" tabindex="-1">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">✏ 手动选择合同（覆盖自动匹配）</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div id="contract-picker-info" style="font-size:0.85rem;color:var(--color-text-dim);margin-bottom:0.5rem"></div>
+        <div class="table-wrap" style="max-height:420px;overflow-y:auto">
+          <table class="table table-sm table-striped" style="font-size:0.8rem">
+            <thead><tr>
+              <th style="width:32px"></th>
+              <th>合约编号</th><th>货物</th><th>行数</th><th>总数量</th><th>单位</th>
+            </tr></thead>
+            <tbody id="contract-picker-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="clearContractOverride()">清除覆盖</button>
+        <button type="button" class="btn btn-primary" onclick="applyContractOverride()"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><path d="M20 6 9 17l-5-5"/></svg>应用选择</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 事件绑定：DOM已完全解析，直接查找按钮并绑定，消除 file:// 协议下的时序问题 -->
+<script>
+(function() {
+  var upBtn = document.querySelector('button[onclick="uploadMappingN()"]');
+  var goBtn = document.querySelector('button[onclick="goUploadFromMapping()"]');
+  if (upBtn) {
+    upBtn.removeAttribute('onclick');
+    upBtn.setAttribute('onclick', '');
+    // ⚠️ 20260825o 修复：此前改绑到 window.uploadMapping（undefined，见 app-front.js 1125 行），
+    // 导致点击「上传新台账」无反应弹不出文件选择器。内联 uploadMappingN() 才是弹窗入口，保留调用。
+    upBtn.onclick = function() {
+      if (typeof window.uploadMappingN === 'function') window.uploadMappingN();
+    };
+  }
+  if (goBtn) {
+    goBtn.removeAttribute('onclick');
+    goBtn.setAttribute('onclick', '');
+    goBtn.onclick = function() {
+      if (typeof window.goUploadFromMapping === 'function') window.goUploadFromMapping();
+    };
+  }
+})();
+</script>
+</body>
+</html>

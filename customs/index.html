@@ -1,0 +1,1297 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>报关单 → 整理底稿 转换工具</title>
+<meta name="version" content="v5-decl-summary-2026-08-25">
+<script src="xlsx.full.min.js"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text",
+               "PingFang SC", "Microsoft YaHei", sans-serif;
+  background: #F5F5F7; color: #333; min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+.header {
+  background: #ffffff;
+  color: #1D1D1F;
+  padding: 28px 36px 22px;
+  border-bottom: 1px solid rgba(0,0,0,.06);
+}
+.header h1 { font-size: 22px; margin-bottom: 6px; font-weight: 600; letter-spacing: -.01em; }
+.header p { font-size: 13px; color: #6E6E73; opacity: 1; }
+.container { max-width: 1400px; margin: 0 auto; padding: 24px; }
+
+/* Card */
+.card {
+  background: #fff; border-radius: 12px; padding: 24px;
+  margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,.08);
+}
+.card-title { font-size: 16px; font-weight: 600; margin-bottom: 16px;
+  padding-bottom: 12px; border-bottom: 2px solid #e8ecf1; }
+
+/* Upload */
+.upload-zone {
+  border: 2px dashed #cbd5e0; border-radius: 10px; padding: 48px 24px;
+  text-align: center; cursor: pointer; transition: all .2s;
+  background: #fafbfc;
+}
+.upload-zone:hover, .upload-zone.dragover {
+  border-color: #007AFF; background: rgba(0,122,255,.10);
+}
+.upload-zone .icon { font-size: 48px; color: #007AFF; margin-bottom: 12px; }
+.upload-zone .text { font-size: 16px; color: #4a5568; }
+.upload-zone .sub { font-size: 13px; color: #a0aec0; margin-top: 6px; }
+.upload-zone input[type=file] { display: none; }
+
+/* File list */
+.file-list { margin-top: 16px; }
+.file-item {
+  display: flex; align-items: center; padding: 8px 12px;
+  background: #f7fafc; border: 1px solid #e2e8f0; border-radius: 6px;
+  margin-bottom: 6px; font-size: 14px;
+}
+.file-item .num { width: 28px; color: #718096; font-weight: 600; }
+.file-item .name { flex: 1; }
+.file-item .sheets { color: #718096; font-size: 12px; }
+.file-item .status { color: #38a169; font-weight: 600; margin-left: 12px; }
+
+/* Controls */
+.controls-row {
+  display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-end;
+}
+.control-group { display: flex; flex-direction: column; gap: 4px; }
+.control-group label { font-size: 13px; font-weight: 600; color: #4a5568; }
+.control-group input, .control-group select {
+  padding: 8px 12px; border: 1px solid #e2e8f0; border-radius: 6px;
+  font-size: 14px; outline: none; transition: border .2s;
+}
+.control-group input:focus, .control-group select:focus {
+  border-color: #007AFF; box-shadow: 0 0 0 3px rgba(49,130,206,.15);
+}
+.rate-input { width: 140px; }
+
+/* Buttons */
+.btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 10px 20px; border: none; border-radius: 8px;
+  font-size: 14px; font-weight: 600; cursor: pointer; transition: all .2s;
+}
+.btn-primary { background: #007AFF; color: #fff; }
+.btn-primary:hover { background: #006FE6; }
+.btn-primary:disabled { background: #a0aec0; cursor: not-allowed; }
+.btn-success { background: #38a169; color: #fff; }
+.btn-success:hover { background: #2f855a; }
+.btn-success:disabled { background: #a0aec0; cursor: not-allowed; }
+.btn-outline { background: #fff; color: #4a5568; border: 1px solid #e2e8f0; }
+.btn-outline:hover { background: #f7fafc; }
+
+/* Summary stats */
+.stats-row {
+  display: flex; flex-wrap: wrap; gap: 16px; margin-top: 16px;
+}
+.stat-card {
+  flex: 1; min-width: 140px; text-align: center;
+  background: #f7fafc; border: 1px solid #e2e8f0; border-radius: 8px;
+  padding: 14px; }
+.stat-card .num { font-size: 24px; font-weight: 700; color: #006FE6; }
+.stat-card .label { font-size: 12px; color: #718096; margin-top: 4px; }
+
+/* Table */
+.table-wrap {
+  overflow-x: auto; margin-top: 16px;
+  border: 1px solid #e2e8f0; border-radius: 8px;
+}
+table { width: 100%; border-collapse: collapse; white-space: nowrap; }
+thead { background: #2d3748; color: #fff; position: sticky; top: 0; z-index: 1; }
+th { padding: 10px 12px; font-size: 12px; font-weight: 600;
+  text-align: left; border-right: 1px solid #4a5568; }
+td { padding: 8px 12px; font-size: 13px; border-bottom: 1px solid #edf2f7;
+  border-right: 1px solid #edf2f7; }
+tr:hover td { background: #f7fafc; }
+
+/* Misc */
+.tag {
+  display: inline-block; padding: 2px 8px; border-radius: 4px;
+  font-size: 11px; font-weight: 600;
+}
+.tag-blue { background: rgba(0,122,255,.10); color: #006FE6; }
+.tag-green { background: #f0fff4; color: #276749; }
+.mt-16 { margin-top: 16px; }
+.mb-16 { margin-bottom: 16px; }
+.text-center { text-align: center; }
+.text-right { text-align: right; }
+.flex-between { display: flex; justify-content: space-between; align-items: center; }
+
+/* Toast */
+.toast {
+  position: fixed; top: 24px; right: 24px; z-index: 9999;
+  padding: 14px 20px; border-radius: 8px; color: #fff;
+  font-size: 14px; font-weight: 600; box-shadow: 0 4px 12px rgba(0,0,0,.15);
+  transform: translateX(120%); transition: transform .3s;
+}
+.toast.show { transform: translateX(0); }
+.toast-success { background: #38a169; }
+.toast-error { background: #e53e3e; }
+.toast-info { background: #007AFF; }
+
+/* Tabs */
+.tabs { display: flex; gap: 4px; margin-bottom: 16px; }
+.tab-btn {
+  padding: 8px 20px; border: 1px solid #e2e8f0; border-radius: 6px 6px 0 0;
+  background: #f7fafc; cursor: pointer; font-size: 13px; font-weight: 600;
+  color: #4a5568; transition: all .2s; border-bottom: none;
+}
+.tab-btn.active { background: #fff; color: #006FE6; border-bottom: 2px solid #006FE6; }
+.tab-btn:hover:not(.active) { background: #edf2f7; }
+.tab-panel { display: none; }
+.tab-panel.active { display: block; }
+
+/* Column visibility */
+.col-toggle {
+  display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px;
+}
+.col-toggle label {
+  display: flex; align-items: center; gap: 4px;
+  font-size: 12px; cursor: pointer; padding: 3px 8px;
+  border: 1px solid #e2e8f0; border-radius: 4px;
+  background: #f7fafc; user-select: none;
+}
+.col-toggle label:hover { background: #edf2f7; }
+.col-toggle input { accent-color: #007AFF; }
+
+/* Print styles for export */
+@media print {
+  .header, .card-title, .controls-row, .btn, .tabs, .col-toggle,
+  .upload-zone, .stats-row, .file-list { display: none !important; }
+  body { background: #fff; }
+  .card { box-shadow: none; border: none; padding: 0; }
+  .table-wrap { border: 1px solid #000; }
+  thead { background: #333 !important; }
+}
+
+/* Loading overlay */
+.loading-overlay {
+  display: none; position: fixed; inset: 0; background: rgba(255,255,255,.8);
+  z-index: 9998; align-items: center; justify-content: center;
+  flex-direction: column; gap: 16px;
+}
+.loading-overlay.show { display: flex; }
+.spinner {
+  width: 48px; height: 48px; border: 4px solid #e2e8f0;
+  border-top-color: #007AFF; border-radius: 50%;
+  animation: spin .8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<!-- Loading -->
+<div class="loading-overlay" id="loadingOverlay">
+  <div class="spinner"></div>
+  <div style="font-size:16px;color:#4a5568;font-weight:600;" id="loadingText">正在处理中...</div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<!-- Header -->
+<div class="header">
+  <h1>📄 报关单 → 整理底稿 转换工具</h1>
+  <p>上传单一窗口导出的报关单 Excel 文件，自动汇总并转换为整理底稿格式，支持汇率换算</p>
+</div>
+
+<div class="container">
+
+  <!-- Upload -->
+  <div class="card">
+    <div class="card-title">📤 上传报关单文件</div>
+    <div class="controls-row" style="margin-bottom:12px;">
+      <div class="control-group">
+        <label>💱 汇率 (HKD → CNY)</label>
+        <input class="rate-input" type="number" id="rateInput" step="0.00001" value="0.86784">
+      </div>
+      <div class="control-group">
+        <label>📅 期间</label>
+        <input type="text" id="periodInput" value="2026年7月1-23日" style="width:160px;">
+      </div>
+    </div>
+    <div class="upload-zone" id="uploadZone">
+      <div class="icon">📂</div>
+      <div class="text"><strong>点击选择文件</strong> 或拖拽 Excel 文件到此处</div>
+      <div class="sub">支持 .xlsx 格式，可批量上传多个报关单文件</div>
+      <input type="file" id="fileInput" multiple accept=".xlsx">
+    </div>
+    <div class="file-list" id="fileList"></div>
+  </div>
+
+  <!-- Controls -->
+  <div class="card" id="controlsCard" style="display:none;">
+    <div class="card-title">⚙️ 参数设置</div>
+    <div class="controls-row">
+      <button class="btn btn-success" id="exportBtn" disabled onclick="exportExcel()">📥 导出整理底稿</button>
+      <button class="btn btn-primary" id="exportSheetBtn" disabled onclick="exportSheetSummary()">📋 报关单sheet汇总</button>
+      <button class="btn btn-outline" id="resetBtn" onclick="resetAll()">🔄 重置</button>
+    </div>
+    <div class="stats-row" id="statsRow"></div>
+  </div>
+
+  <!-- Preview -->
+  <div class="card" id="previewCard" style="display:none;">
+    <div class="flex-between">
+      <div class="card-title" style="border:none;padding:0;">👁️ 数据预览</div>
+      <div style="font-size:12px;color:#718096;" id="rowCount"></div>
+    </div>
+
+    <div class="tabs" id="tabHeaders"></div>
+
+    <div id="tabContents"></div>
+  </div>
+
+</div>
+
+<script>
+// ===== 代码映射表（来自 单位代码映射.xlsx 海关官方标准）=====
+const UNIT_MAP = {
+  '000':'<无单位>','001':'台','002':'座','003':'辆','004':'艘','005':'架',
+  '006':'套','007':'个','008':'只','009':'头','010':'张','011':'件',
+  '012':'支','013':'枝','014':'根','015':'条','016':'把','017':'块',
+  '018':'卷','019':'副','020':'片','021':'组','022':'份','023':'幅',
+  '025':'双','026':'对','027':'棵','028':'株','029':'井','030':'米',
+  '031':'盘','032':'平方米','033':'立方米','034':'筒','035':'千克',
+  '036':'克','037':'盆','038':'万个','039':'具','040':'百副','041':'百支',
+  '042':'百把','043':'百个','044':'百片','045':'刀','046':'疋',
+  '047':'公担','048':'扇','049':'百枝','050':'千只','051':'千块',
+  '052':'千盒','053':'千枝','054':'千个','055':'亿支','056':'亿个',
+  '057':'万套','058':'千张','059':'万张','060':'千伏安','061':'千瓦',
+  '062':'千瓦时','063':'千升','067':'英尺','070':'吨','071':'长吨',
+  '072':'短吨','073':'司马担','074':'司马斤','075':'斤','076':'磅',
+  '077':'担','078':'英担','079':'短担','080':'两','081':'市担',
+  '083':'盎司','084':'克拉','085':'市尺','086':'码','088':'英寸',
+  '089':'寸','090':'管','095':'升','096':'毫升','097':'英加仑',
+  '098':'美加仑','099':'立方英尺','101':'立方尺','110':'平方码',
+  '111':'平方英尺','112':'平方尺','115':'英制马力','116':'公制马力',
+  '118':'令','120':'箱','121':'批','122':'罐','123':'桶','124':'扎',
+  '125':'包','126':'箩','127':'打','128':'筐','129':'罗','130':'匹',
+  '131':'册','132':'本','133':'发','134':'枚','135':'捆','136':'袋',
+  '139':'粒','140':'盒','141':'合','142':'瓶','143':'千支','144':'万双',
+  '145':'万粒','146':'千粒','147':'千米','148':'千英尺','149':'百万贝可',
+  '163':'部','164':'亿株','170':'人份','500':'尾','501':'百尾',
+  '502':'千尾','504':'百枚','505':'头份','506':'千头份','507':'种',
+  '508':'群','510':'头次','511':'样次','512':'项','513':'标箱',
+  '520':'每头每样','521':'每样每项','522':'每只每次','523':'每只每天',
+  '524':'每头每天','525':'每平方米每天','526':'每次每平方米',
+  '527':'每批每品种','528':'每人每天','540':'艘次','541':'架次',
+  '542':'厢次','543':'辆次','544':'标准箱次','547':'次','548':'航班次',
+  '549':'舱次','550':'车次','551':'每单元','552':'每蹲位次',
+  '553':'每个机构','554':'每个领域','555':'每户次','556':'每企业',
+  '557':'每人每小时','558':'每人日','559':'每实验室','560':'每头只',
+  '561':'每项','562':'每项每双','563':'每元素','564':'每只','565':'每只次',
+  '566':'每种','567':'每种商品','568':'模','569':'样','570':'样份',
+  '571':'页','572':'证','573':'每人次','575':'每批每天','576':'每头份',
+  '601':'年','602':'季度','603':'月','604':'旬','605':'周','606':'天',
+  '607':'小时','608':'分钟','609':'秒','610':'毫秒',
+  '801':'','997':'元','998':'金额','999':'其他'
+};
+
+// 成交方式映射（来源：成交方式及币种映射.xlsx，海关标准代码）
+const TRADE_MODE_MAP = { '1': 'CIF', '2': 'C&F', '3': 'FOB', '4': 'C&I', '5': '市场价', '6': '垫仓', '7': 'EXW' };
+// 币制映射（来源：成交方式及币种映射.xlsx，30种常用货币）
+const CURRENCY_MAP = {
+  'AED': '阿联酋迪拉姆', 'AUD': '澳大利亚元', 'CAD': '加拿大元', 'CHF': '瑞士法郎',
+  'CNY': '人民币', 'DKK': '丹麦克朗', 'EUR': '欧元', 'GBP': '英镑',
+  'HKD': '港币', 'HUF': '匈牙利福林', 'IDR': '印度尼西亚卢比', 'JPY': '日本元',
+  'KHR': '柬埔寨瑞尔', 'KRW': '韩国圆', 'KZT': '哈萨克斯坦坚戈', 'MNT': '蒙古图格里克',
+  'MOP': '澳门元', 'MXN': '墨西哥比索', 'MYR': '马来西亚林吉特', 'NOK': '挪威克朗',
+  'NZD': '新西兰元', 'PLN': '波兰兹罗提', 'RUB': '俄罗斯卢布', 'SAR': '沙特里亚尔',
+  'SEK': '瑞典克朗', 'SGD': '新加坡元', 'THB': '泰国铢', 'TRY': '土耳其里拉',
+  'USD': '美元', 'ZAR': '南非兰特'
+};
+
+// ===== State =====
+let allData = [];       // Array<{fileName, declNum, contractNo, shipper, consignee, tradeMode, items[]}>
+let allRows = [];       // Flat array of display rows
+let previewVisible = {}; // column visibility
+let currentTab = '汇总';
+
+// ===== Toast =====
+function showToast(msg, type = 'info') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast toast-' + type + ' show';
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => t.classList.remove('show'), 3500);
+}
+
+// ===== Loading =====
+function showLoading(text = '正在处理中...') {
+  document.getElementById('loadingText').textContent = text;
+  document.getElementById('loadingOverlay').classList.add('show');
+}
+function hideLoading() {
+  document.getElementById('loadingOverlay').classList.remove('show');
+}
+
+// ===== Upload =====
+const uploadZone = document.getElementById('uploadZone');
+const fileInput = document.getElementById('fileInput');
+
+uploadZone.addEventListener('click', () => fileInput.click());
+uploadZone.addEventListener('dragover', (e) => {
+  e.preventDefault();
+  uploadZone.classList.add('dragover');
+});
+uploadZone.addEventListener('dragleave', () => {
+  uploadZone.classList.remove('dragover');
+});
+uploadZone.addEventListener('drop', (e) => {
+  e.preventDefault();
+  uploadZone.classList.remove('dragover');
+  if (e.dataTransfer.files.length) {
+    // files 属性只读，不能赋值，直接传 e.dataTransfer.files
+    handleFiles(e.dataTransfer.files);
+  }
+});
+fileInput.addEventListener('change', () => {
+  if (fileInput.files.length) handleFiles(fileInput.files);
+});
+
+async function handleFiles(files) {
+  const excelFiles = Array.from(files).filter(f =>
+    f.name.match(/\.xlsx?$/i) && !f.name.match(/报关单sheet汇总/)
+  );
+  if (!excelFiles.length) {
+    showToast('未找到有效的 Excel 文件', 'error');
+    return;
+  }
+  showLoading(`正在解析 ${excelFiles.length} 个文件...`);
+  allData = [];
+  allRows = [];
+  const errors = [];
+
+  for (const file of excelFiles) {
+    try {
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, { type: 'array', cellDates: true });
+      const sheetName = findSheet(wb);
+      if (!sheetName) {
+        errors.push(`${file.name}: 未找到"基本信息&商品信息"sheet`);
+        continue;
+      }
+      const ws = wb.Sheets[sheetName];
+
+      // ===== 关键修复：扩展 !ref 到真实数据范围 =====
+      // 单一窗口导出的 xlsx 文件 dimension ref 可能被截断（如仅到28行），
+      // 但实际数据延伸到更多行。SheetJS 加载了所有单元格，但 sheet_to_json 仍按 !ref 截断。
+      // extendSheetRef() 扫描所有 cell 地址，把 !ref 扩展到最后有数据的行，无上限限制。
+      const beforeRef = ws['!ref'];
+      extendSheetRef(ws);
+      console.log(`[${file.name}] !ref: ${beforeRef} → ${ws['!ref']}`);
+
+      // 转为二维数组（含公式解析值）
+      const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null, raw: true });
+      const parsed = parseDeclaration(rows, file.name);
+      if (parsed) {
+        console.log(`[${file.name}] items: ${parsed.items.length}, rows[0]=${parsed.importExportDate}, total=${parsed.items.reduce((s,i) => s + i.totalPrice, 0)}`);
+        allData.push(parsed);
+      } else {
+        errors.push(`${file.name}: 数据格式无法识别`);
+      }
+    } catch (e) {
+      errors.push(`${file.name}: ${e.message}`);
+    }
+  }
+
+  hideLoading();
+
+  if (errors.length) {
+    showToast(`处理完成，但有 ${errors.length} 个错误`, 'error');
+    console.error(errors);
+  } else {
+    showToast(`成功解析 ${allData.length} 个报关单`, 'success');
+  }
+
+  buildFlatRows();
+  updateUI();
+}
+
+function findSheet(wb) {
+  const targets = ['基本信息&商品信息', '基本信息', '商品信息'];
+  for (const t of targets) {
+    if (wb.SheetNames.includes(t)) return t;
+  }
+  // Fuzzy match
+  const s = wb.SheetNames.find(n => n.includes('基本信息'));
+  return s || null;
+}
+
+// ===== Parser =====
+function parseDeclaration(rows, fileName) {
+  if (!rows || rows.length < 15) return null;
+
+  let declNum = '', contractNo = '', shipper = '', consignee = '';
+  let tradeMode = '3', importExportDate = '';
+  let declareDate = '', freight = '', freightCur = '', insurance = '', insuranceCur = '', misc = '', miscCur = '';
+
+  // Scan ALL cells in header rows (rows 0-20) for specific labels
+  // Data layout is key-value pairs in interleaved format:
+  // Row ex: [..., '境内收发货人名称', '深圳海旭绿碳科技有限公司', ...]
+  for (let i = 0; i < Math.min(21, rows.length); i++) {
+    const r = rows[i];
+    if (!r) continue;
+    for (let j = 0; j < r.length; j++) {
+      const cell = r[j];
+      if (cell === null || cell === undefined || typeof cell !== 'string') continue;
+      const label = cell.trim();
+
+      // 报关单号: label='报关单号', next cell = value
+      if (label === '报关单号' && j + 1 < r.length && r[j + 1]) {
+        declNum = String(r[j + 1]).trim();
+      }
+      // 合同协议号
+      if (label === '合同协议号' && j + 1 < r.length && r[j + 1]) {
+        contractNo = String(r[j + 1]).trim();
+      }
+      // 境内收发货人名称
+      if (label === '境内收发货人名称' && j + 1 < r.length && r[j + 1]) {
+        shipper = String(r[j + 1]).trim();
+      }
+      // 境外收发货人名称（外文）
+      if (label === '境外收发货人名称（外文）' && j + 1 < r.length && r[j + 1]) {
+        consignee = String(r[j + 1]).trim();
+      }
+      // 成交方式
+      if (label === '成交方式' && j + 1 < r.length && r[j + 1]) {
+        tradeMode = String(r[j + 1]).trim();
+      }
+      // 进/出口日期
+      if ((label === '进/出口日期' || label === '进口日期' || label === '出口日期')
+           && j + 1 < r.length && r[j + 1]) {
+        importExportDate = String(r[j + 1]).trim();
+      }
+      // 申报日期
+      if (label === '申报日期' && j + 1 < r.length && r[j + 1]) {
+        declareDate = String(r[j + 1]).trim();
+      }
+      // 运费数值 / 保费数值 / 杂费数值（标签与数值相邻）
+      if ((label === '运费数值' || label === '保费数值' || label === '杂费数值')
+           && j + 1 < r.length) {
+        const v = String(r[j + 1] === null || r[j + 1] === undefined ? '' : r[j + 1]).trim();
+        if (label === '运费数值') freight = v;
+        if (label === '保费数值') insurance = v;
+        if (label === '杂费数值') misc = v;
+      }
+      // 运费币制代码 / 保费币制代码 / 杂费币制代码
+      if ((label === '运费币制代码' || label === '保费币制代码' || label === '杂费币制代码')
+           && j + 1 < r.length && r[j + 1]) {
+        const v = String(r[j + 1]).trim();
+        if (label === '运费币制代码') freightCur = v;
+        if (label === '保费币制代码') insuranceCur = v;
+        if (label === '杂费币制代码') miscCur = v;
+      }
+    }
+  }
+
+  // Find the product data start row (row where col[0]='项号' and col[4]='商品名称')
+  let dataStart = -1;
+  for (let i = 0; i < rows.length; i++) {
+    const r = rows[i];
+    if (!r || !r[0]) continue;
+    if (String(r[0]).trim() === '项号' && String(r[4]||'').trim() === '商品名称') {
+      dataStart = i;
+      break;
+    }
+  }
+  if (dataStart < 0) return null;
+
+  // 保留原始行副本（含头部元数据 + 表头 + 商品明细），用于「sheet汇总」导出
+  const rawRows = rows.map(r => r.slice());
+
+  // Extract items — verified column indices:
+  // col[4]=商品名称, col[5]=规格型号, col[6]=成交数量,
+  // col[7]=成交计量单位, col[8]=单价, col[9]=总价, col[10]=币制
+  const items = [];
+  for (let i = dataStart + 1; i < rows.length; i++) {
+    const r = rows[i];
+    if (!r) continue;
+    const itemNo = String(r[0]||'').trim();
+    if (!itemNo || itemNo === '' || isNaN(Number(itemNo))) continue;
+
+    const productName = String(r[4]||'').trim();
+    if (!productName) continue;
+
+    const spec = String(r[5]||'').trim();
+    const qty = parseNum(r[6]);
+    const unit = String(r[7]||'').trim();
+    const unitPrice = parseNum(r[8]);   // ← col[8] = 单价 (verified)
+    const totalPrice = parseNum(r[9]);  // ← col[9] = 总价 (verified)
+    const currency = String(r[10]||'HKD').trim(); // ← col[10] = 币制 (verified)
+    const legalUnit = String(r[12]||'').trim();
+
+    items.push({ itemNo, productName, spec, qty, unit, unitPrice, totalPrice, currency, legalUnit });
+  }
+
+  if (!items.length) return null;
+
+  return {
+    fileName,
+    declNum: declNum || `DECL-${items.length}-${Date.now()}`,
+    contractNo,
+    shipper: shipper || '深圳海旭绿碳科技有限公司',
+    consignee: consignee || '海旭绿碳科技有限公司',
+    tradeMode,
+    importExportDate,
+    declareDate,
+    freight, freightCur,
+    insurance, insuranceCur,
+    misc, miscCur,
+    items,
+    rawRows  // 保存原始行，用于「sheet汇总」导出
+  };
+}
+
+function parseNum(v) {
+  if (v === null || v === undefined) return 0;
+  if (typeof v === 'number') return v;
+  const s = String(v).trim().replace(/,/g, '');
+  const n = parseFloat(s);
+  return isNaN(n) ? 0 : n;
+}
+
+// ===== 修复 SheetJS 漏行：扩展 ws['!ref'] 到真实数据范围 =====
+// 单一窗口导出的 xlsx 文件 dimension ref 经常被截断（如 A1:AQ28），
+// 但实际单元格数据延伸到 35 行甚至更多行。SheetJS 加载了所有单元格，
+// 但 sheet_to_json 会按 !ref 截断输出。本函数扫描所有 cell 地址，
+// 把 !ref 扩展到真实覆盖范围，确保不漏行。
+function extendSheetRef(ws) {
+  if (!ws || !ws['!ref']) return;
+  let maxRow = 0, maxCol = 0;
+  for (const key in ws) {
+    if (key.startsWith('!')) continue;
+    const addr = XLSX.utils.decode_cell(key);
+    if (addr.r + 1 > maxRow) maxRow = addr.r + 1;
+    if (addr.c + 1 > maxCol) maxCol = addr.c + 1;
+  }
+  const oldRange = XLSX.utils.decode_range(ws['!ref']);
+  if (maxRow > oldRange.e.r + 1 || maxCol > oldRange.e.c + 1) {
+    ws['!ref'] = XLSX.utils.encode_range({
+      s: { r: 0, c: 0 },
+      e: { r: Math.max(maxRow - 1, oldRange.e.r), c: Math.max(maxCol - 1, oldRange.e.c) }
+    });
+  }
+}
+
+// ===== Build flat rows =====
+function buildFlatRows() {
+  allRows = [];
+  let seq = 0;
+  for (const dec of allData) {
+    seq++;
+    const declSeq = seq;
+    const tradeName = TRADE_MODE_MAP[dec.tradeMode] || dec.tradeMode;
+    for (const item of dec.items) {
+      const unitCN = UNIT_MAP[item.unit] || item.unit;
+      const currencyCN = CURRENCY_MAP[item.currency] || item.currency;
+      allRows.push({
+        seq: declSeq,
+        shipper: dec.shipper,
+        consignee: dec.consignee,
+        declNum: dec.declNum,
+        productName: item.productName,
+        spec: item.spec,
+        qty: item.qty,
+        unit: item.unit,
+        unitPrice: item.unitPrice,
+        totalPrice: item.totalPrice,
+        currency: item.currency,
+        contractNo: dec.contractNo,
+        tradeMode: dec.tradeMode,
+        unitCN: unitCN,
+        tradeName: tradeName,
+        hkd: item.totalPrice,
+        currencyCN: currencyCN,
+        cny: 0,  // Will calculate later
+        _declIdx: allData.indexOf(dec),
+      });
+    }
+  }
+}
+
+// ===== Update UI =====
+function updateUI() {
+  // File list
+  const fileList = document.getElementById('fileList');
+  fileList.innerHTML = allData.map((d, i) => `
+    <div class="file-item">
+      <span class="num">${i+1}</span>
+      <span class="name">${d.fileName}</span>
+      <span class="sheets">${d.items.length} 项商品 · ${d.declNum}</span>
+      <span class="status">✅ 已解析</span>
+    </div>
+  `).join('');
+
+  if (!allData.length) {
+    document.getElementById('controlsCard').style.display = 'none';
+    document.getElementById('previewCard').style.display = 'none';
+    return;
+  }
+
+  document.getElementById('controlsCard').style.display = 'block';
+  document.getElementById('previewCard').style.display = 'block';
+  document.getElementById('exportBtn').disabled = false;
+  document.getElementById('exportSheetBtn').disabled = false;
+
+  // Stats
+  const totalItems = allRows.length;
+  const totalHKD = allRows.reduce((s, r) => s + r.hkd, 0);
+  const rate = parseFloat(document.getElementById('rateInput').value) || 0.86784;
+  const totalCNY = totalHKD * rate;
+  const declCount = new Set(allRows.map(r => r.declNum)).size;
+
+  document.getElementById('statsRow').innerHTML = `
+    <div class="stat-card"><div class="num">${allData.length}</div><div class="label">报关单份数</div></div>
+    <div class="stat-card"><div class="num">${totalItems}</div><div class="label">商品行数</div></div>
+    <div class="stat-card"><div class="num">${totalHKD.toLocaleString('zh-CN', {minimumFractionDigits:2})}</div><div class="label">总金额 (HKD)</div></div>
+    <div class="stat-card"><div class="num">${totalCNY.toLocaleString('zh-CN', {minimumFractionDigits:2})}</div><div class="label">总金额 (CNY)</div></div>
+  `;
+
+  document.getElementById('rowCount').textContent = `共 ${totalItems} 行数据`;
+
+  // Build tabs
+  buildTabs();
+
+  // Render current tab
+  renderTab(currentTab);
+}
+
+// ===== Tabs =====
+function buildTabs() {
+  const tabHeaders = document.getElementById('tabHeaders');
+  const tabContents = document.getElementById('tabContents');
+
+  tabHeaders.innerHTML = `
+    <div class="tab-btn ${currentTab === '汇总' ? 'active' : ''}" onclick="switchTab('汇总')">📊 汇总表</div>
+    <div class="tab-btn ${currentTab === '报关单汇总' ? 'active' : ''}" onclick="switchTab('报关单汇总')">📦 报关单汇总</div>
+    <div class="tab-btn ${currentTab === '明细' ? 'active' : ''}" onclick="switchTab('明细')">📋 明细</div>
+    <div class="tab-btn ${currentTab === '映射表' ? 'active' : ''}" onclick="switchTab('映射表')">📖 映射表 (${Object.keys(UNIT_MAP).length}项)</div>
+  `;
+
+  tabContents.innerHTML = `
+    <div class="tab-panel ${currentTab === '汇总' ? 'active' : ''}" id="panel-汇总"></div>
+    <div class="tab-panel ${currentTab === '报关单汇总' ? 'active' : ''}" id="panel-报关单汇总"></div>
+    <div class="tab-panel ${currentTab === '明细' ? 'active' : ''}" id="panel-明细"></div>
+    <div class="tab-panel ${currentTab === '映射表' ? 'active' : ''}" id="panel-映射表"></div>
+  `;
+}
+
+function switchTab(tab) {
+  currentTab = tab;
+  const tabs = ['汇总', '报关单汇总', '明细', '映射表'];
+  const tabIdx = tabs.indexOf(tab);
+  document.querySelectorAll('.tab-btn').forEach((b, i) => b.classList.toggle('active', i === tabIdx));
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.getElementById('panel-' + tab).classList.add('active');
+  renderTab(tab);
+}
+
+// ===== Render Tab =====
+function renderTab(tab) {
+  const rate = parseFloat(document.getElementById('rateInput').value) || 0.86784;
+
+  // Calculate CNY for each row
+  for (const row of allRows) {
+    row.cny = Math.round(row.hkd * rate * 100) / 100;
+  }
+
+  const panel = document.getElementById(`panel-${tab}`);
+  if (tab === '汇总') {
+    panel.innerHTML = renderSummaryTable(rate);
+  } else if (tab === '报关单汇总') {
+    panel.innerHTML = renderDeclSummaryTable(rate);
+  } else if (tab === '明细') {
+    panel.innerHTML = renderDetailTable(rate);
+  } else if (tab === '映射表') {
+    panel.innerHTML = renderMappingTable();
+  }
+}
+
+// ===== 报关单汇总：按报关单号分类汇总（收货人 / HKD / CNY） =====
+function renderDeclSummaryTable(rate) {
+  if (!allRows.length) return '<div class="text-center" style="padding:40px;color:#718096;">暂无数据</div>';
+
+  // 按报关单号分组
+  const declMap = {};
+  for (const r of allRows) {
+    if (!declMap[r.declNum]) declMap[r.declNum] = { declNum: r.declNum, consignee: r.consignee, hkd: 0, cny: 0, cnt: 0 };
+    declMap[r.declNum].hkd += r.hkd;
+    declMap[r.declNum].cny += r.cny;
+    declMap[r.declNum].cnt++;
+  }
+  const decls = Object.values(declMap);
+
+  const fmt2 = v => v.toLocaleString('zh-CN', { minimumFractionDigits: 2 });
+  let totalHKD = 0, totalCNY = 0;
+  for (const d of decls) { totalHKD += d.hkd; totalCNY += d.cny; }
+
+  const rows = decls.map((d, i) => `
+    <tr>
+      <td>${i + 1}</td>
+      <td style="font-family:monospace;font-size:12px;">${d.declNum}</td>
+      <td>${d.consignee || '-'}</td>
+      <td style="text-align:right">${d.cnt}</td>
+      <td style="text-align:right;font-weight:600;color:#2c7a7b;">${fmt2(d.hkd)}</td>
+      <td style="text-align:right;font-weight:600;color:#006FE6;">${fmt2(d.cny)}</td>
+    </tr>
+  `).join('');
+
+  return `
+    <div style="margin-bottom:12px;font-size:12px;color:#4a5568;">
+      当前汇率: 1 HKD = ${rate} CNY · 共 ${decls.length} 份报关单
+      <button class="btn btn-success" style="padding:4px 12px;font-size:12px;margin-left:12px;" onclick="exportDeclSummaryExcel()">📥 导出报关单汇总 Excel</button>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr>
+          <th style="min-width:50px">序号</th>
+          <th style="min-width:150px">报关单号</th>
+          <th style="min-width:200px">收货人</th>
+          <th style="min-width:60px;text-align:right">商品项数</th>
+          <th style="min-width:110px;text-align:right">HKD 合计</th>
+          <th style="min-width:110px;text-align:right">CNY 合计</th>
+        </tr></thead>
+        <tbody>
+          ${rows}
+          <tr style="background:#e6fffa;font-weight:700;">
+            <td colspan="3" style="text-align:right;">总计</td>
+            <td style="text-align:right;">${allRows.length}</td>
+            <td style="text-align:right;color:#2c7a7b;">${fmt2(totalHKD)}</td>
+            <td style="text-align:right;color:#006FE6;">${fmt2(totalCNY)}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function renderSummaryTable(rate) {
+  if (!allRows.length) return '<div class="text-center" style="padding:40px;color:#718096;">暂无数据</div>';
+
+  const headers = [
+    { key: 'seq', label: '序号', width: 50 },
+    { key: 'shipper', label: '发货人', width: 160 },
+    { key: 'consignee', label: '收货人', width: 140 },
+    { key: 'declNum', label: '报关单号', width: 140 },
+    { key: 'productName', label: '商品名称', width: 120 },
+    { key: 'spec', label: '规格型号', width: 200 },
+    { key: 'qty', label: '成交数量', width: 80 },
+    { key: 'unit', label: '成交计量单位', width: 70 },
+    { key: 'unitPrice', label: '单价', width: 80 },
+    { key: 'totalPrice', label: '总价', width: 90 },
+    { key: 'currency', label: '币制', width: 50 },
+    { key: 'contractNo', label: '合同协议号', width: 200 },
+    { key: 'tradeMode', label: '贸易方式', width: 60 },
+    { key: 'unitCN', label: '成交计量单位(中文)', width: 100 },
+    { key: 'tradeName', label: '贸易方式(中文)', width: 70 },
+    { key: 'hkd', label: 'HKD', width: 100 },
+    { key: 'currencyCN', label: '币制(中文)', width: 60 },
+    { key: 'cny', label: 'CNY', width: 100 },
+  ];
+
+  const thead = headers.map(h => `<th style="min-width:${h.width}px">${h.label}</th>`).join('');
+  const tbody = allRows.map(r => {
+    const cells = headers.map(h => renderCell(r, h));
+    return `<tr>${cells.join('')}</tr>`;
+  }).join('');
+
+  return `
+    <div style="margin-bottom:12px;font-size:12px;color:#4a5568;">
+      当前汇率: 1 HKD = ${rate} CNY
+      <button class="btn btn-outline" style="padding:4px 12px;font-size:12px;margin-left:8px;" onclick="switchTab('明细')">查看明细</button>
+    </div>
+    <div class="table-wrap">
+      <table><thead><tr>${thead}</tr></thead><tbody>${tbody}</tbody></table>
+    </div>
+  `;
+}
+
+function renderDetailTable(rate) {
+  // Group rows by declaration
+  const groups = {};
+  for (const row of allRows) {
+    if (!groups[row.declNum]) groups[row.declNum] = { decl: row, items: [] };
+    groups[row.declNum].items.push(row);
+  }
+
+  const fmt2 = v => v.toLocaleString('zh-CN', { minimumFractionDigits: 2 });
+
+  let html = '';
+  for (const [declNum, g] of Object.entries(groups)) {
+    const d = allData.find(x => x.declNum === declNum);
+    const totalHKD = g.items.reduce((s, r) => s + r.hkd, 0);
+    const totalCNY = g.items.reduce((s, r) => s + r.cny, 0);
+    html += `
+      <div style="background:#f7fafc;border:1px solid #e2e8f0;border-radius:8px;padding:16px;margin-bottom:16px;">
+        <div style="margin-bottom:8px;">
+          <span class="tag tag-blue">${declNum}</span>
+          <span style="margin-left:8px;font-size:13px;">收货人: <strong>${d ? d.consignee || '-' : '-'}</strong></span>
+          <span style="margin-left:16px;font-size:13px;">合同: ${d ? d.contractNo : '-'}</span>
+          <span style="margin-left:16px;font-size:13px;">文件: ${d ? d.fileName : '-'}</span>
+        </div>
+        ${d ? `
+        <div style="display:flex;flex-wrap:wrap;gap:8px 24px;margin-bottom:10px;padding:6px 10px;background:#fff;border:1px solid #e2e8f0;border-radius:4px;font-size:12px;color:#4a5568;">
+          <span>申报日期: <strong>${d.declareDate || '-'}</strong></span>
+          <span>成交方式: <strong>${d.tradeMode || '-'} ${(TRADE_MODE_MAP[d.tradeMode] ? '(' + TRADE_MODE_MAP[d.tradeMode] + ')' : '')}</strong></span>
+          <span>运费: <strong>${d.freight || '-'} ${d.freightCur || ''}</strong></span>
+          <span>保费: <strong>${d.insurance || '-'} ${d.insuranceCur || ''}</strong></span>
+          <span>杂费: <strong>${d.misc || '-'} ${d.miscCur || ''}</strong></span>
+        </div>` : ''}
+        <table style="font-size:12px;">
+          <thead style="background:#edf2f7;color:#4a5568;">
+            <tr>
+              <th style="min-width:40px">项号</th>
+              <th style="min-width:100px">商品名称</th>
+              <th style="min-width:140px">规格型号</th>
+              <th style="min-width:60px;text-align:right">数量</th>
+              <th style="min-width:50px">单位</th>
+              <th style="min-width:70px;text-align:right">单价</th>
+              <th style="min-width:80px;text-align:right">总价(HKD)</th>
+              <th style="min-width:90px;text-align:right">人民币金额(CNY)</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${g.items.map((r, i) => `
+              <tr>
+                <td>${i+1}</td>
+                <td>${r.productName}</td>
+                <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;">${r.spec}</td>
+                <td style="text-align:right">${r.qty.toLocaleString()}</td>
+                <td>${r.unit}</td>
+                <td style="text-align:right">${r.unitPrice.toLocaleString('zh-CN', {minimumFractionDigits:2,maximumFractionDigits:4})}</td>
+                <td style="text-align:right">${fmt2(r.hkd)}</td>
+                <td style="text-align:right;color:#006FE6;font-weight:600;">${fmt2(r.cny)}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+        <div style="text-align:right;margin-top:8px;padding:6px 10px;background:#e6fffa;border-radius:4px;font-size:13px;">
+          本单合计：<strong style="color:#2c7a7b;font-size:14px;">${fmt2(totalHKD)} HKD</strong>
+          <span style="margin-left:16px;">人民币合计：<strong style="color:#006FE6;font-size:14px;">${fmt2(totalCNY)} CNY</strong></span>
+        </div>
+      </div>
+    `;
+  }
+  return html;
+}
+
+function renderMappingTable() {
+  const codes = Object.keys(UNIT_MAP).sort((a, b) => parseInt(a) - parseInt(b));
+  // Also show trade mode and currency mappings
+  const tmCodes = Object.keys(TRADE_MODE_MAP).sort();
+  const currCodes = Object.keys(CURRENCY_MAP).sort();
+
+  const unitHtml = codes.map(c => {
+    const name = UNIT_MAP[c];
+    const hasData = allData.some(d => d.items.some(item => item.unit === c));
+    return `<tr class="${hasData ? 'used' : ''}">
+      <td><code>${c}</code></td>
+      <td>${name || '<span style="color:#a0aec0">(空)</span>'}</td>
+      <td>${hasData ? '✅' : ''}</td>
+    </tr>`;
+  }).join('');
+
+  const tmHtml = tmCodes.map(c => {
+    const hasData = allData.some(d => d.tradeMode === c);
+    return `<tr class="${hasData ? 'used' : ''}">
+      <td><code>${c}</code></td>
+      <td>${TRADE_MODE_MAP[c]}</td>
+      <td>${hasData ? '✅' : ''}</td>
+    </tr>`;
+  }).join('');
+
+  const currHtml = currCodes.map(c => {
+    const hasData = allData.some(d => d.items.some(item => item.currency === c));
+    return `<tr class="${hasData ? 'used' : ''}">
+      <td><code>${c}</code></td>
+      <td>${CURRENCY_MAP[c]}</td>
+      <td>${hasData ? '✅' : ''}</td>
+    </tr>`;
+  }).join('');
+
+  return `
+    <style>
+    .map-section { margin-bottom: 24px; }
+    .map-section h3 { font-size: 15px; margin-bottom: 10px; color: #2d3748; }
+    .map-section .info { font-size: 12px; color: #718096; margin-bottom: 8px; }
+    .map-section table { font-size: 12px; }
+    .map-section table th { background: #4a5568; padding: 6px 10px; }
+    .map-section table td { padding: 4px 10px; }
+    .map-section table tr.used { background: #f0fff4; }
+    .map-section table tr.used td:last-child { color: #38a169; font-weight: 600; }
+    .map-section table code { background: #edf2f7; padding: 1px 5px; border-radius: 3px; font-family: monospace; }
+    .map-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 2px; }
+    .map-grid .item { display: flex; justify-content: space-between; padding: 3px 8px; background: #f7fafc; border: 1px solid #edf2f7; border-radius: 4px; font-size: 12px; }
+    .map-grid .item .code { font-family: monospace; color: #006FE6; font-weight: 600; }
+    .map-grid .item .name { color: #4a5568; }
+    .map-grid .item.used { background: #f0fff4; border-color: #c6f6d5; }
+    </style>
+
+    <div class="map-section">
+      <h3>📏 成交计量单位代码映射表</h3>
+      <div class="info">来源：单位代码映射.xlsx（海关标准代码） · 共 ${codes.length} 项 · <span style="color:#38a169">绿色高亮</span> = 当前数据中使用的代码</div>
+      <div class="map-grid">
+        ${codes.map(c => {
+          const name = UNIT_MAP[c] || '(空)';
+          const hasData = allData.some(d => d.items.some(item => item.unit === c));
+          return `<div class="item ${hasData ? 'used' : ''}">
+            <span class="code">${c}</span>
+            <span class="name">${name}</span>
+            ${hasData ? '<span style="color:#38a169;font-size:11px">✓</span>' : ''}
+          </div>`;
+        }).join('')}
+      </div>
+    </div>
+
+    <div class="map-section">
+      <h3>🚢 成交方式（贸易方式）映射</h3>
+      <div class="map-grid">
+        ${tmCodes.map(c => {
+          const hasData = allData.some(d => d.tradeMode === c);
+          return `<div class="item ${hasData ? 'used' : ''}">
+            <span class="code">${c}</span>
+            <span class="name">${TRADE_MODE_MAP[c]}</span>
+            ${hasData ? '<span style="color:#38a169;font-size:11px">✓</span>' : ''}
+          </div>`;
+        }).join('')}
+      </div>
+    </div>
+
+    <div class="map-section">
+      <h3>💲 币制映射</h3>
+      <div class="map-grid">
+        ${currCodes.map(c => {
+          const hasData = allData.some(d => d.items.some(item => item.currency === c));
+          return `<div class="item ${hasData ? 'used' : ''}">
+            <span class="code">${c}</span>
+            <span class="name">${CURRENCY_MAP[c]}</span>
+            ${hasData ? '<span style="color:#38a169;font-size:11px">✓</span>' : ''}
+          </div>`;
+        }).join('')}
+      </div>
+    </div>
+  `;
+}
+
+function renderCell(row, h) {
+  let val = row[h.key];
+  if (val === undefined || val === null || val === '') return '<td></td>';
+
+  const isNum = typeof val === 'number';
+  let display = isNum ? val.toLocaleString('zh-CN', {
+    minimumFractionDigits: val % 1 === 0 ? 0 : Math.min(4, String(val).split('.')[1]?.length || 0),
+    maximumFractionDigits: 4
+  }) : String(val);
+
+  // Color CNY column
+  if (h.key === 'cny') {
+    return `<td style="text-align:right;font-weight:600;color:#006FE6;">${display}</td>`;
+  }
+  if (h.key === 'hkd') {
+    return `<td style="text-align:right;font-weight:600;">${display}</td>`;
+  }
+  if (['qty', 'unitPrice', 'totalPrice'].includes(h.key)) {
+    return `<td style="text-align:right">${display}</td>`;
+  }
+  return `<td>${display}</td>`;
+}
+
+// ===== Rate change =====
+document.getElementById('rateInput').addEventListener('input', () => {
+  if (allData.length) renderTab(currentTab);
+});
+
+// ===== Export =====
+function exportExcel() {
+  if (!allRows.length) {
+    showToast('没有数据可导出', 'error');
+    return;
+  }
+
+  showLoading('正在生成 Excel 文件...');
+  try {
+    const rate = parseFloat(document.getElementById('rateInput').value) || 0.86784;
+    const period = document.getElementById('periodInput').value || '';
+
+    // Calculate CNY
+    for (const row of allRows) {
+      row.cny = Math.round(row.hkd * rate * 100) / 100;
+    }
+
+    // Build workbook
+    const wb = XLSX.utils.book_new();
+
+    // === Sheet 1: 汇总 ===
+    const summaryHeaders = [
+      '序号', '发货人', '收货人', '报关单号', '商品名称', '规格型号',
+      '成交数量', '成交计量单位', '单价', '总价', '币制', '合同协议号',
+      '贸易方式', '', '成交计量单位', '贸易方式', 'HKD', '', '', 'CNY'
+    ];
+
+    const wsData = [
+      // Row 1: title
+      [`报关单汇总 整理底稿 (${period})`],
+      // Row 2: comment + exchange rate
+      ['', '', '检查公司名有没有简繁体夹杂等错误', '', '有没有错别字', '', '', '', '', '', '有没有其他币种',
+       '检查地盘对应报关主体是否一致', '', '', '', '', '', '', '', rate],
+      // Row 3: headers
+      summaryHeaders,
+    ];
+
+    // Data rows — 同一报关单的所有行共用同一序号
+    const declSeqMap = {};
+    let seq = 0;
+    for (const r of allRows) {
+      if (!(r.declNum in declSeqMap)) {
+        seq++;
+        declSeqMap[r.declNum] = seq;
+      }
+    }
+    for (const r of allRows) {
+      const s = declSeqMap[r.declNum];
+
+      const row = [
+        s, r.shipper, r.consignee, r.declNum, r.productName, r.spec,
+        r.qty, r.unit, r.unitPrice, r.totalPrice, r.currency, r.contractNo,
+        r.tradeMode, null, r.unitCN, r.tradeName, r.hkd, r.currencyCN, null, r.cny
+      ];
+      wsData.push(row);
+    }
+
+    // Totals row
+    const totalHKD = allRows.reduce((a, r) => a + r.hkd, 0);
+    const totalCNY = allRows.reduce((a, r) => a + r.cny, 0);
+    wsData.push([null, null, null, null, null, null, null, null, null, null,
+      null, null, null, null, null, null, totalHKD, null, null, totalCNY]);
+
+    const ws1 = XLSX.utils.aoa_to_sheet(wsData);
+
+    // Set column widths
+    ws1['!cols'] = [
+      { wch: 6 }, { wch: 22 }, { wch: 18 }, { wch: 18 }, { wch: 16 },
+      { wch: 24 }, { wch: 10 }, { wch: 8 }, { wch: 10 }, { wch: 12 },
+      { wch: 6 }, { wch: 28 }, { wch: 6 }, { wch: 4 }, { wch: 12 },
+      { wch: 8 }, { wch: 12 }, { wch: 6 }, { wch: 4 }, { wch: 12 }
+    ];
+
+    // Merge cells for title
+    ws1['!merges'] = [
+      { s: { r: 0, c: 0 }, e: { r: 0, c: 19 } }
+    ];
+
+    XLSX.utils.book_append_sheet(wb, ws1, '汇总');
+
+    // === Sheet 2: 基本信息汇总（所有报关单原始数据纵向合并）===
+    const rawHeaders = [
+      '报关单号', '合同协议号', '发货人', '收货人', '成交方式', '进出口日期',
+      '项号', '商品名称', '规格型号', '成交数量', '成交计量单位', '单价', '总价', '币制'
+    ];
+    const rawDataRows = [rawHeaders];
+
+    for (const dec of allData) {
+      for (const item of dec.items) {
+        rawDataRows.push([
+          dec.declNum, dec.contractNo, dec.shipper, dec.consignee,
+          dec.tradeMode, dec.importExportDate,
+          item.itemNo, item.productName, item.spec,
+          item.qty, item.unit, item.unitPrice, item.totalPrice, item.currency
+        ]);
+      }
+    }
+
+    const ws2 = XLSX.utils.aoa_to_sheet(rawDataRows);
+    ws2['!cols'] = [
+      { wch: 18 }, { wch: 30 }, { wch: 22 }, { wch: 22 }, { wch: 6 },
+      { wch: 12 }, { wch: 6 }, { wch: 18 }, { wch: 30 },
+      { wch: 12 }, { wch: 8 }, { wch: 12 }, { wch: 14 }, { wch: 6 }
+    ];
+    XLSX.utils.book_append_sheet(wb, ws2, '基本信息汇总');
+
+    // === Sheet 3: 报关单汇总（按报关单号分类汇总 HKD / CNY）===
+    const declMap = {};
+    for (const r of allRows) {
+      if (!declMap[r.declNum]) declMap[r.declNum] = { declNum: r.declNum, consignee: r.consignee, hkd: 0, cny: 0, cnt: 0 };
+      declMap[r.declNum].hkd += r.hkd;
+      declMap[r.declNum].cny += r.cny;
+      declMap[r.declNum].cnt++;
+    }
+    const declList = Object.values(declMap);
+    let dHKD = 0, dCNY = 0, dCnt = 0;
+    const declRows = [[`报关单汇总 (${period})`], [], ['序号', '报关单号', '收货人', '商品项数', 'HKD 合计', 'CNY 合计']];
+    declList.forEach((d, i) => {
+      dHKD += d.hkd; dCNY += d.cny; dCnt += d.cnt;
+      declRows.push([i + 1, d.declNum, d.consignee || '', d.cnt, Math.round(d.hkd * 100) / 100, Math.round(d.cny * 100) / 100]);
+    });
+    declRows.push([null, '总计', '', dCnt, Math.round(dHKD * 100) / 100, Math.round(dCNY * 100) / 100]);
+
+    const ws3 = XLSX.utils.aoa_to_sheet(declRows);
+    ws3['!cols'] = [
+      { wch: 6 }, { wch: 20 }, { wch: 28 }, { wch: 10 }, { wch: 14 }, { wch: 14 }
+    ];
+    ws3['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 5 } }];
+    XLSX.utils.book_append_sheet(wb, ws3, '报关单汇总');
+
+    // Export — 使用 Blob 手动下载，确保文件名不含乱码
+    const outName = `整理底稿_${period || '报关单汇总'}.xlsx`;
+    const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+    const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = outName;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(link.href);
+    hideLoading();
+    showToast(`已导出: ${outName}`, 'success');
+  } catch (e) {
+    hideLoading();
+    showToast('导出失败: ' + e.message, 'error');
+    console.error(e);
+  }
+}
+
+// ===== 报关单sheet汇总导出（原始复制，不加工）=====
+function exportSheetSummary() {
+  if (!allData.length) {
+    showToast('没有数据可导出', 'error');
+    return;
+  }
+
+  showLoading('正在生成 sheet 汇总...');
+  try {
+    const period = document.getElementById('periodInput').value || '';
+    const wb = XLSX.utils.book_new();
+    const usedNames = new Set();
+
+    for (const dec of allData) {
+      // sheet 名取文件名前 31 字符（Excel 限制），与 skill 一致
+      let baseName = dec.fileName.replace(/\.xlsx$/i, '').slice(0, 31);
+      let sheetName = baseName;
+      let dupCount = 1;
+      while (usedNames.has(sheetName)) {
+        sheetName = (baseName.slice(0, 28) + '(' + dupCount + ')').slice(0, 31);
+        dupCount++;
+      }
+      usedNames.add(sheetName);
+
+      // 原始 data，不做任何加工，仅将 undefined 转 null 避免 SheetJS 报错
+      const raw = (dec.rawRows || []).map(r =>
+        (r || []).map(v => (v === undefined ? null : v))
+      );
+      const ws = XLSX.utils.aoa_to_sheet(raw);
+      XLSX.utils.book_append_sheet(wb, ws, sheetName);
+    }
+
+    const outName = `报关单sheet汇总_${period || '全部'}.xlsx`;
+    const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+    const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = outName;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(link.href);
+    hideLoading();
+    showToast(`已导出: ${outName}`, 'success');
+  } catch (e) {
+    hideLoading();
+    showToast('导出失败: ' + e.message, 'error');
+    console.error(e);
+  }
+}
+
+// ===== 报关单汇总导出（按报关单号分类，独立 Excel）=====
+function exportDeclSummaryExcel() {
+  if (!allRows.length) {
+    showToast('没有数据可导出', 'error');
+    return;
+  }
+
+  showLoading('正在生成报关单汇总 Excel...');
+  try {
+    const rate = parseFloat(document.getElementById('rateInput').value) || 0.86784;
+    const period = document.getElementById('periodInput').value || '';
+
+    // 计算 CNY
+    for (const row of allRows) {
+      row.cny = Math.round(row.hkd * rate * 100) / 100;
+    }
+
+    // 按报关单号聚合
+    const declMap = {};
+    for (const r of allRows) {
+      if (!declMap[r.declNum]) declMap[r.declNum] = { declNum: r.declNum, consignee: r.consignee, hkd: 0, cny: 0, cnt: 0 };
+      declMap[r.declNum].hkd += r.hkd;
+      declMap[r.declNum].cny += r.cny;
+      declMap[r.declNum].cnt++;
+    }
+    const declList = Object.values(declMap);
+    let tHKD = 0, tCNY = 0, tCnt = 0;
+
+    const rows = [[`报关单汇总 (${period})`], [],
+      ['序号', '报关单号', '收货人', '商品项数', 'HKD 合计', 'CNY 合计']];
+    declList.forEach((d, i) => {
+      tHKD += d.hkd; tCNY += d.cny; tCnt += d.cnt;
+      rows.push([i + 1, d.declNum, d.consignee || '', d.cnt, Math.round(d.hkd * 100) / 100, Math.round(d.cny * 100) / 100]);
+    });
+    rows.push([null, '总计', '', tCnt, Math.round(tHKD * 100) / 100, Math.round(tCNY * 100) / 100]);
+
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    ws['!cols'] = [
+      { wch: 6 }, { wch: 20 }, { wch: 28 }, { wch: 10 }, { wch: 14 }, { wch: 14 }
+    ];
+    ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 5 } }];
+    XLSX.utils.book_append_sheet(wb, ws, '报关单汇总');
+
+    const outName = `报关单汇总_${period || '全部'}.xlsx`;
+    const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+    const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = outName;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(link.href);
+    hideLoading();
+    showToast(`已导出: ${outName}`, 'success');
+  } catch (e) {
+    hideLoading();
+    showToast('导出失败: ' + e.message, 'error');
+    console.error(e);
+  }
+}
+
+// ===== Reset =====
+function resetAll() {
+  allData = [];
+  allRows = [];
+  fileInput.value = '';
+  document.getElementById('fileList').innerHTML = '';
+  document.getElementById('controlsCard').style.display = 'none';
+  document.getElementById('previewCard').style.display = 'none';
+  document.getElementById('tabHeaders').innerHTML = '';
+  document.getElementById('tabContents').innerHTML = '';
+  document.getElementById('statsRow').innerHTML = '';
+  document.getElementById('exportBtn').disabled = true;
+  document.getElementById('exportSheetBtn').disabled = true;
+  document.getElementById('rowCount').textContent = '';
+}
+</script>
+</body>
+</html>
