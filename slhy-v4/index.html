@@ -410,6 +410,36 @@ td.cell-generic span.cell-editable:hover { background: #fef3c7; }
 
 /* ── Step 切换：单步视图（SPA Wizard）── */
 .hidden { display: none !important; }
+
+/* ═══ 单价核对 / 数量核对 强调展示（v20260826p）═══ */
+/* 表头 inline style 已在 app-front.js 设置：单价核对=黄底/橘黄字， 数量核对=绿底/绿字 */
+/* 数据行：两列统一浅绿底 */
+#compare-table td.col-price-check,
+#compare-table td.col-qty-check {
+  background: #ecfdf5;
+  border-left: 2px solid #10b981;
+  text-align: center;
+  vertical-align: middle;
+  white-space: normal;
+  padding: .5rem .65rem;
+  line-height: 1.4;
+  font-variant-numeric: tabular-nums;
+  min-width: 150px;
+}
+#compare-table td.col-price-check { border-left-color: #f59e0b; }
+#compare-table .check-cell {
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  font-weight: 600; font-size: .78rem;
+}
+#compare-table .check-cell.pass { color: #047857; }
+#compare-table .check-cell.fail { color: #b91c1c; }
+#compare-table .check-cell.na   { color: #94a3b8; font-style: italic; }
+#compare-table .check-row {
+  display: inline-flex; align-items: center; gap: 4px;
+  white-space: nowrap;
+}
+#compare-table .check-row.pass { color: #047857; }
+#compare-table .check-row.fail { color: #b91c1c; }
 </style>
 </head>
 <body>
@@ -588,10 +618,10 @@ alert('✅ 上传成功！已加载 '+cnt+' 个合同，台账名称：'+nm);})
 window._uploadMappingFile=null;
 })();
 </script>
-<script src="vendor/bootstrap.bundle.min.js?v=20260825o"></script>
-<script src="vendor/xlsx.full.min.js?v=20260825o"></script>
-<script src="vendor/tesseract.min.js?v=20260825o"></script>
-<script type="module" src="js/app-front.js?v=20260825o"></script>
+<script src="vendor/bootstrap.bundle.min.js?v=20260826p"></script>
+<script src="vendor/xlsx.full.min.js?v=20260826p"></script>
+<script src="vendor/tesseract.min.js?v=20260826p"></script>
+<script type="module" src="js/app-front.js?v=20260826p"></script>
 
 <!-- 手动选合同弹窗 -->
 <div class="modal fade" id="contract-picker-modal" tabindex="-1">
@@ -643,6 +673,145 @@ window._uploadMappingFile=null;
     };
   }
 })();
+</script>
+
+<!-- ═══ 导出 Excel（v20260826p 新增）═══ -->
+<script>
+// 状态文本：单价核对 / 数量核对 pass/fail/na → 中文显示
+function _priceCheckText(s) {
+  if (s === 'pass') return '✓ 一致';
+  if (s === 'fail') return '✗ 不一致';
+  return '—';
+}
+function _qtyCheckText(s) {
+  if (s === 'pass') return '✓ ≤合同';
+  if (s === 'fail') return '✗ 超合同';
+  return '—';
+}
+// 把 line 对象拍扁为导出 Excel 的一行（按列名顺序）
+function _flattenReconcileLine(groupHeader, line) {
+  var c = line.contract || {}, d = line.delivery || {}, p = line.pi || {};
+  return {
+    '合约编号':        groupHeader || '',
+    '核对结果':        line.result || '',
+    '规格型号':        line.规格型号 || '',
+    '合同-货物名称':   c.货物名称 || '',
+    '合同-规格':       c.规格原文 || c.规格 || '',
+    '合同-数量':       c.数量 == null ? '' : c.数量,
+    '合同-单位':       c.单位 || '',
+    '合同-单价':       c.单价 == null ? '' : c.单价,
+    '送货-货物名称':   d.货物名称 || '',
+    '送货-规格':       d.规格原文 || d.规格 || '',
+    '送货-数量':       d.数量 == null ? '' : d.数量,
+    '送货-数量汇总':   line.数量汇总送货 == null ? '' : line.数量汇总送货,
+    '送货-送货单编号': d.送货单编号 || '',
+    '送货-单位':       d.单位 || '',
+    '发票-货物名称':   p.货物名称 || '',
+    '发票-规格':       p.规格原文 || p.规格 || '',
+    '发票-数量':       p.数量 == null ? '' : p.数量,
+    '发票-数量汇总':   line.数量汇总发票 == null ? '' : line.数量汇总发票,
+    '发票-送货单编号': p.送货单编号 || '',
+    '发票-发票编号':   p.发票编号 || '',
+    '发票-单位':       p.单位 || '',
+    '发票-单价':       p.单价 == null ? '' : p.单价,
+    '说明':            (line.reasons || []).join('；'),
+    '单价核对':        _priceCheckText(line.单价核对),
+    '数量核对':        _qtyCheckText(line.数量核对)
+  };
+}
+
+function exportReconcileToExcel() {
+  var data = window.reconcileData;
+  if (!data || !data.groups || !data.groups.length) {
+    alert('暂无可导出的核对结果，请先完成三流核对');
+    return;
+  }
+  if (typeof XLSX === 'undefined') {
+    alert('XLSX 库尚未加载，请稍候再试');
+    return;
+  }
+  // 1) 明细 sheet：每行 = 一条核对 line
+  var rows = [];
+  data.groups.forEach(function (g) {
+    var header = g.合约编号 || g.contract_合约编号 || g.delivery_合约编号 || g.pi_合约编号 || '';
+    (g.lines || []).forEach(function (line) {
+      rows.push(_flattenReconcileLine(header, line));
+    });
+  });
+  // 2) 汇总 sheet：按合约编号维度统计核对结果
+  var summaryMap = {};
+  data.groups.forEach(function (g) {
+    var header = g.合约编号 || g.contract_合约编号 || g.delivery_合约编号 || g.pi_合约编号 || '';
+    (g.lines || []).forEach(function (line) {
+      var k = header + '||' + (line.规格型号 || '');
+      if (!summaryMap[k]) {
+        summaryMap[k] = {
+          '合约编号': header,
+          '规格型号': line.规格型号 || '',
+          '明细行数': 0,
+          '单价一致': 0,
+          '单价不一致': 0,
+          '数量≤合同': 0,
+          '数量超合同': 0
+        };
+      }
+      var s = summaryMap[k];
+      s['明细行数']++;
+      if (line.单价核对 === 'pass') s['单价一致']++;
+      else if (line.单价核对 === 'fail') s['单价不一致']++;
+      if (line.数量核对 === 'pass') s['数量≤合同']++;
+      else if (line.数量核对 === 'fail') s['数量超合同']++;
+    });
+  });
+  var summaryRows = Object.keys(summaryMap).map(function (k) { return summaryMap[k]; });
+
+  // 3) 总览 sheet：统计卡 + 核对结果
+  var stats = data.summary || {};
+  var statsRows = [
+    { '指标': '合计行',  '数量': stats.total || 0 },
+    { '指标': '核对无误','数量': stats.ok || 0 },
+    { '指标': '未发货',  '数量': stats.not_shipped || 0 },
+    { '指标': '核对有误','数量': stats.error || 0 },
+    { '指标': '新合同',  '数量': stats.new || 0 }
+  ];
+
+  // 4) 新合同 sheet（若有）
+  var newRows = (data.new_contracts || []).map(function (c) {
+    return { '合约编号': c.合约编号, '送货明细': c.delivery_count, '发票明细': c.pi_count };
+  });
+
+  var wb = XLSX.utils.book_new();
+  var aoa1 = XLSX.utils.json_to_sheet(rows);
+  XLSX.utils.book_append_sheet(wb, aoa1, '核对明细');
+  var aoa2 = XLSX.utils.json_to_sheet(summaryRows);
+  XLSX.utils.book_append_sheet(wb, aoa2, '按合约-规格汇总');
+  var aoa3 = XLSX.utils.json_to_sheet(statsRows);
+  XLSX.utils.book_append_sheet(wb, aoa3, '总览');
+  if (newRows.length) {
+    var aoa4 = XLSX.utils.json_to_sheet(newRows);
+    XLSX.utils.book_append_sheet(wb, aoa4, '新合同提示');
+  }
+
+  // 文件名：三流核对_YYYYMMDD_HHmmss.xlsx
+  var d = new Date();
+  function pad(n) { return n < 10 ? '0' + n : '' + n; }
+  var stamp = d.getFullYear() + pad(d.getMonth() + 1) + pad(d.getDate()) + '_' + pad(d.getHours()) + pad(d.getMinutes()) + pad(d.getSeconds());
+  var fname = '三流核对结果_' + stamp + '.xlsx';
+  try {
+    XLSX.writeFile(wb, fname);
+  } catch (e) {
+    // writeFile 在 file:// 协议下偶发异常，退化为 dataURL 下载
+    try {
+      var dataUrl = XLSX.write(wb, { bookType: 'xlsx', type: 'base64' });
+      var a = document.createElement('a');
+      a.href = 'data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,' + dataUrl;
+      a.download = fname;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    } catch (e2) {
+      alert('导出失败：' + (e.message || e) + ' / ' + (e2.message || e2));
+    }
+  }
+}
 </script>
 </body>
 </html>

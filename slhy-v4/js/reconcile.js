@@ -83,6 +83,19 @@ export function buildReconcileGroups({ ledger = {}, deliveryLines = [], piLines 
       if (!String(p.发票编号 || '').trim()) reasons.push('未识别形式发票编号');
       if (!safeFloat(p.单价, 0)) reasons.push('未识别形式发票单价');
     }
+    // ── 单价核对：合同单价 vs 形式发票单价（送货单没有单价） ──
+    let _priceCheck = 'na';
+    if (cl && p) {
+      const cp = safeFloat(cl.单价, 0), pp = safeFloat(p.单价, 0);
+      if (cp && pp) _priceCheck = (Math.abs(cp - pp) < 0.01) ? 'pass' : 'fail';
+    }
+    // ── 数量核对：送货汇总 d_sum 是否 ≤ 合同数量 cq ──
+    let _qtyCheck = 'na';
+    if (cl) {
+      const totalD = safeFloat(_totals.d_sum, 0);
+      const cq = safeFloat(cl.数量, 0);
+      if (cq) _qtyCheck = (totalD <= cq + 1e-9) ? 'pass' : 'fail';
+    }
     return {
       '规格型号': (cl || d || p || {}).规格原文 || (cl || d || p || {}).规格 || '',
       'contract': cl ? { '货物名称': cl.货物名称 || '', '规格': cl.规格 || '', '规格原文': cl.规格原文 || cl.规格 || '', '数量': cl.数量 ?? 0, '单位': cl.单位 || '', '单价': cl.单价 ?? 0 } : null,
@@ -90,6 +103,7 @@ export function buildReconcileGroups({ ledger = {}, deliveryLines = [], piLines 
       'pi': p ? { '货物名称': p.货物名称 || '', '规格': p.规格 || '', '规格原文': p.规格原文 || p.规格 || '', '数量': p.数量 ?? 0, '单位': p.单位 || '', '单价': p.单价 ?? 0, '发票编号': p.发票编号 || '', '送货单编号': (p['送货单编号_全部'] || []).join(', ') || '' } : null,
       '数量汇总送货': _totals.d_sum || 0, '数量汇总发票': _totals.p_sum || 0,
       'result': result, 'reasons': reasons, '编号对应': _dnFlag,
+      '单价核对': _priceCheck, '数量核对': _qtyCheck,
     };
   }
   function rangeLineMatch(line, cl, minD, maxD) {

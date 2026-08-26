@@ -700,7 +700,7 @@ function renderReconcile(data) {
     const pCno = g.pi_合约编号 || '（无）';
     const matchTag = (g.contract_合约编号 && g.delivery_合约编号 && _normCno(g.contract_合约编号) === _normCno(g.delivery_合约编号))
       ? '' : ' ⚠ 编号不完全一致';
-    return `<tr class="group-header-row" data-gidx="${gIdx}"><th colspan="22" style="text-align:left;padding:0.7rem 1rem;font-size:0.8rem">
+    return `<tr class="group-header-row" data-gidx="${gIdx}"><th colspan="24" style="text-align:left;padding:0.7rem 1rem;font-size:0.8rem">
       <span style="display:inline-flex;align-items:center;gap:8px"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M7 2h10v4H7zM5 6h14v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2z"/></svg> 合约编号 — 合同：<code>${esc(cCno)}</code> ｜ 送货单：<code>${esc(dCno)}</code> ｜ 形式发票：<code>${esc(pCno)}</code>${matchTag}</span>
       <button class="btn btn-outline-primary btn-sm" style="margin-left:1rem;font-size:0.8rem" onclick="openContractPicker(${gIdx})"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:3px"><path d="M12 3v18M3 12h18"/></svg>更换合约</button>
     </th></tr>`;
@@ -714,6 +714,8 @@ function renderReconcile(data) {
     <th colspan="6" class="section-header">送 货 单</th>
     <th colspan="8" class="section-header">形 式 发 票</th>
     <th rowspan="2">说明</th>
+    <th rowspan="2" style="background:#fff7e6;color:#b45309;border-left:2px solid #f59e0b">单价核对</th>
+    <th rowspan="2" style="background:#ecfdf5;color:#047857;border-left:2px solid #10b981">数量核对</th>
   </tr><tr class="col-head-row">
     <th>名称</th><th>规格</th><th>数量</th><th>单位</th><th>单价</th>
     <th>名称</th><th>规格</th><th>数量</th><th>数量汇总</th><th>送货单编号</th><th>单位</th>
@@ -722,6 +724,58 @@ function renderReconcile(data) {
   $('#compare-thead').innerHTML = groupHeadersHtml + thead;
 
   function td(v, cls) { return `<td class="${cls||''}">${v===''||v===null||v===undefined?'—':v}</td>`; }
+
+  // ── 单价核对 / 数量核对 单元格：显示具体数值 + 标记 ──
+  // 数字格式化：按截图样式保留固定小数位(单价 2 位、数量 3 位),不裁尾零
+  function _fmtPrice(n) {
+    const v = Number(n);
+    if (!Number.isFinite(v)) return '';
+    return v.toFixed(2);
+  }
+  function _fmt(n) {
+    const v = Number(n);
+    if (!Number.isFinite(v)) return '';
+    return v.toFixed(3);
+  }
+  function priceCheckHtml(line) {
+    const state = line['单价核对'];
+    const c = line.contract || {}, p = line.pi || {};
+    const cPrice = c.单价, pPrice = p.单价, pUnit = p.单位 || '';
+    if (state === 'na') {
+      return '<div class="check-cell na">—</div>';
+    }
+    if (state === 'pass') {
+      const cps = _fmtPrice(cPrice), pps = _fmtPrice(pPrice);
+      return `<div class="check-cell pass">✓ 合同 ${cps} = 发票 ${pps}${pUnit ? '/' + pUnit : ''}</div>`;
+    }
+    // fail
+    const cps = _fmtPrice(cPrice), pps = _fmtPrice(pPrice);
+    return `<div class="check-cell fail">✗ 合同 ${cps} ≠ 发票 ${pps}${pUnit ? '/' + pUnit : ''}</div>`;
+  }
+  function qtyCheckHtml(line) {
+    const state = line['数量核对'];
+    const c = line.contract || {};
+    const totalD = Number(line['数量汇总送货'] || 0);
+    const totalP = Number(line['数量汇总发票'] || 0);
+    const cq = Number(c.数量 || 0);
+    if (state === 'na') {
+      return '<div class="check-cell na">—</div>';
+    }
+    const dOk = totalD <= cq + 1e-9;
+    const pOk = totalP <= cq + 1e-9;
+    const dSym = dOk ? '✓' : '✗', pSym = pOk ? '✓' : '✗';
+    const dOp = dOk ? ' ≤ ' : ' > ';
+    const pOp = pOk ? ' ≤ ' : ' > ';
+    const ds = _fmt(totalD), ps = _fmt(totalP), cs = _fmt(cq);
+    const dCls = dOk ? 'pass' : 'fail';
+    const pCls = pOk ? 'pass' : 'fail';
+    // 全 pass → 整块标记 pass；任一 fail → 整块 fail
+    const blockCls = (dOk && pOk) ? 'pass' : 'fail';
+    return `<div class="check-cell ${blockCls}">
+      <span class="check-row ${dCls}">${dSym} 送货 ${ds}${dOp}合同 ${cs}</span>
+      <span class="check-row ${pCls}">${pSym} 发票 ${ps}${pOp}合同 ${cs}</span>
+    </div>`;
+  }
 
   function tdEditable(v, cls) {
     const val = v===''||v===null||v===undefined?'—':esc(String(v));
@@ -765,12 +819,12 @@ function renderReconcile(data) {
 
   let tbody = '';
   if (!groups.length) {
-    tbody = '<tr><td colspan="22" class="text-muted" style="padding:3rem"><div class="empty-state"><div class="es-icon"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg></div>未匹配到任何合约编号</div></td></tr>';
+    tbody = '<tr><td colspan="24" class="text-muted" style="padding:3rem"><div class="empty-state"><div class="es-icon"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg></div>未匹配到任何合约编号</div></td></tr>';
   }
 
   groups.forEach((g, gIdx) => {
     if (!g.lines.length) {
-      tbody += `<tr><td colspan="22" class="text-muted" style="padding:1rem">本合约编号下暂无明细行</td></tr>`;
+      tbody += `<tr><td colspan="24" class="text-muted" style="padding:1rem">本合约编号下暂无明细行</td></tr>`;
     }
 
     // 按连续相同 规格型号 分组
@@ -840,6 +894,8 @@ function renderReconcile(data) {
           tbody += p ? (tdEditable(p.货物名称, 'col-p1') + specCell(p.规格原文 || p.规格, 'col-p2') + tdEditable(p.数量, 'col-p3') + (first ? tdMerge(line['数量汇总发票'], 'col-p4', n) : '') + tdEditable(p.送货单编号 || null, 'col-p5') + tdEditable(p.发票编号 || null, 'col-p6') + tdEditable(p.单位, 'col-p7') + tdEditable(p.单价, 'col-p8'))
                      : tdEditable(null, 'col-p1') + tdEditable(null, 'col-p2') + tdEditable(null, 'col-p3') + (first ? tdMerge(null, 'col-p4', n) : '') + tdEditable(null, 'col-p5') + tdEditable(null, 'col-p6') + tdEditable(null, 'col-p7') + tdEditable(null, 'col-p8');
           tbody += `<td class="col-rsn" style="text-align:left;font-size:0.8rem;color:var(--color-text-dim)">${(line.reasons||[]).map(esc).join('<br>')}</td>`;
+          tbody += `<td class="col-price-check">${priceCheckHtml(line)}</td>`;
+          tbody += `<td class="col-qty-check">${qtyCheckHtml(line)}</td>`;
           tbody += '</tr>';
         });
       });
@@ -854,9 +910,13 @@ function renderReconcile(data) {
     const bar = document.createElement('div');
     bar.id = 'recheck-reconcile-bar';
     bar.style.cssText = 'margin-top:0.8rem;display:flex;align-items:center;justify-content:flex-end;gap:0.8rem;flex-wrap:wrap';
-    bar.innerHTML = `<button class="btn btn-secondary" onclick="doRecheckReconcile()" style="display:inline-flex;align-items:center;gap:0.4rem">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0 4-4m-4 4-4-4"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>重新核对 <span style="font-size:0.75rem;opacity:0.6">（需先手动修改表格中识别的数据）</span>
-    </button>`;
+    bar.innerHTML = `
+      <button class="btn btn-success" onclick="exportReconcileToExcel()" style="display:inline-flex;align-items:center;gap:0.4rem">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>导出 Excel
+      </button>
+      <button class="btn btn-secondary" onclick="doRecheckReconcile()" style="display:inline-flex;align-items:center;gap:0.4rem">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0 4-4m-4 4-4-4"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>重新核对 <span style="font-size:0.75rem;opacity:0.6">（需先手动修改表格中识别的数据）</span>
+      </button>`;
     $('#compare-table').after(bar);
   }
 
@@ -1132,3 +1192,10 @@ window.updateMappingCount = updateMappingCount;
 // 供 index.html 内联脚本调用的引用函数（绕过 ES Module 作用域）
 window.loadMappingsRef = loadMappings;
 window.selectMappingRef = function(name) { selectMapping(name || mappingName); };
+// 把核对数据暴露给非 module 脚本（导出 Excel 按钮 + 调试面板使用）
+// 通过 defineProperty 让外部对 window.reconcileData 的读写都映射到 module 内的 reconcileData 变量
+Object.defineProperty(window, 'reconcileData', {
+  configurable: true,
+  get() { return reconcileData; },
+  set(v) { reconcileData = v; }
+});
