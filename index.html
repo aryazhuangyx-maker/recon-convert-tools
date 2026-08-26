@@ -8,8 +8,7 @@
 <meta http-equiv="Expires" content="0">
 <title>工作台</title>
 <script>
-// 版本自检：每次加载检查 version.json，记录当前版本
-// 同事收到新版本后关闭浏览器重新打开即可看到最新代码，无需自动刷新
+// 版本自检
 (function() {
   var KEY = 'handover_ver';
   fetch('version.json?_=' + Date.now()).then(function(r) { return r.json(); }).then(function(v) {
@@ -26,269 +25,197 @@
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23007AFF'/%3E%3Crect x='7' y='9' width='18' height='3' rx='1.5' fill='white'/%3E%3Crect x='7' y='15' width='18' height='3' rx='1.5' fill='white' opacity='0.7'/%3E%3Crect x='7' y='21' width='11' height='3' rx='1.5' fill='white' opacity='0.4'/%3E%3C/svg%3E">
 <style>
 /* ═══════════════════════════════════════════════
-   macOS Sonoma 风格 · 苹果风 · 极简白卡
+   CodeX 极简风 · 微软雅黑优先
    ═══════════════════════════════════════════════ */
 :root {
-  --bg-grad: linear-gradient(135deg,
-              #C8E1FF 0%,
-              #D4DDF7 30%,
-              #DDD3EE 65%,
-              #E8DAEC 100%);
-  --window-bg: rgba(255, 255, 255, 0.86);
-  --window-bg-solid: #FFFFFF;
-  --sidebar-bg: rgba(246, 247, 250, 0.72);
+  --bg: #FFFFFF;
+  --sidebar-bg: #F7F8FA;
+  --sidebar-border: #ECEDEF;
   --content-bg: #FFFFFF;
-  --border: rgba(0, 0, 0, 0.06);
-  --border-strong: rgba(0, 0, 0, 0.10);
-  --text: #1D1D1F;
-  --text-secondary: #6E6E73;
-  --text-tertiary: #9A9AA0;
-  --accent: #007AFF;
-  --accent-light: rgba(0, 122, 255, 0.10);
-  --accent-hover: rgba(0, 122, 255, 0.16);
-  --dot-red: #FF5F57;
-  --dot-yellow: #FEBC2E;
-  --dot-green: #28C840;
-  --sidebar-w: 240px;
-  --sidebar-w-collapsed: 64px;
-  --titlebar-h: 44px;
-  --window-radius: 16px;
-  --shadow-window: 0 1px 2px rgba(0,0,0,.04), 0 8px 24px rgba(0,0,0,.08), 0 24px 60px rgba(0,0,0,.10);
-  --shadow-menu: 0 1px 2px rgba(0,0,0,.06), 0 4px 16px rgba(0,0,0,.06);
-  --radius-sm: 8px;
-  --radius-md: 12px;
-  --radius-lg: 18px;
+  --border: #ECEDEF;
+  --border-strong: #E2E4E8;
+  --text: #1F2328;
+  --text-secondary: #57606A;
+  --text-tertiary: #8B949E;
+  --accent: #0070F3;
+  --accent-bg: rgba(0, 112, 243, 0.08);
+  --hover-bg: #F2F4F7;
+  --sidebar-w: 232px;
+  --sidebar-w-collapsed: 56px;
 }
-
 * { margin: 0; padding: 0; box-sizing: border-box; }
 html, body { height: 100%; }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text",
-               "PingFang SC", "Microsoft YaHei", "Helvetica Neue", sans-serif;
-  background: #ECEDEF;
+  font-family: "Microsoft YaHei", "微软雅黑", "PingFang SC",
+               -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue",
+               "Noto Sans CJK SC", "Source Han Sans CN", sans-serif;
+  background: var(--bg);
   color: var(--text);
+  font-size: 13px;
+  line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   overflow: hidden;
-  letter-spacing: -0.01em;
+  font-weight: 400;
 }
 
-/* ── 全屏容器（占满视口，无外圈背景） ── */
-.desktop {
-  width: 100vw; height: 100vh;
+/* ── 整体布局（极简单栏） ── */
+.app {
   display: flex;
-}
-
-/* ── macOS 窗口（全屏，去掉圆角/阴影/边框） ── */
-.window {
-  width: 100vw;
   height: 100vh;
-  background: var(--window-bg-solid);
-  display: flex; flex-direction: column;
-  overflow: hidden;
-  position: relative;
 }
 
-/* ── 顶部 macOS 装饰条 ── */
-.titlebar {
-  height: var(--titlebar-h);
-  flex-shrink: 0;
-  display: flex; align-items: center;
-  padding: 0 16px;
-  background: rgba(255, 255, 255, 0.55);
-  border-bottom: 1px solid var(--border);
-  position: relative;
-  -webkit-app-region: drag;
-}
-.tb-dots { display: flex; gap: 8px; align-items: center; }
-.tb-dot {
-  width: 12px; height: 12px; border-radius: 50%;
-  border: 0.5px solid rgba(0,0,0,.08);
-}
-.tb-dot.red    { background: var(--dot-red); }
-.tb-dot.yellow { background: var(--dot-yellow); }
-.tb-dot.green  { background: var(--dot-green); }
-
-.tb-title {
-  position: absolute; left: 50%; transform: translateX(-50%);
-  font-size: 13px; font-weight: 500;
-  color: var(--text-secondary);
-  letter-spacing: 0.02em;
-  pointer-events: none;
-}
-.tb-title b { color: var(--text); font-weight: 600; }
-
-.tb-actions {
-  margin-left: auto; display: flex; gap: 4px; align-items: center;
-  -webkit-app-region: no-drag;
-}
-.tb-btn {
-  width: 32px; height: 28px;
-  border: none; background: transparent;
-  border-radius: 6px;
-  color: var(--text-secondary);
-  cursor: pointer;
-  display: flex; align-items: center; justify-content: center;
-  transition: background .15s, color .15s;
-}
-.tb-btn:hover { background: rgba(0,0,0,.06); color: var(--accent); }
-.tb-btn:active { background: rgba(0,0,0,.10); }
-
-/* ── 窗口主体（侧栏 + 内容） ── */
-.body {
-  flex: 1;
-  display: flex;
-  min-height: 0;
-}
-
-/* ── 侧边栏 ── */
+/* ── 侧边栏（CodeX 风：淡蓝灰底，无装饰） ── */
 .sidebar {
   width: var(--sidebar-w);
   flex-shrink: 0;
   background: var(--sidebar-bg);
-  border-right: 1px solid var(--border);
+  border-right: 1px solid var(--sidebar-border);
   display: flex; flex-direction: column;
-  transition: width .22s cubic-bezier(.4,.0,.2,1);
+  transition: width .2s ease;
 }
 .sidebar.collapsed { width: var(--sidebar-w-collapsed); }
 
 .sb-head {
   padding: 14px 14px 10px;
-  display: flex; align-items: center; gap: 10px;
+  display: flex; align-items: center; gap: 8px;
 }
 .sb-brand {
-  font-size: 15px; font-weight: 600;
+  font-size: 14px; font-weight: 600;
   color: var(--text);
-  white-space: nowrap; overflow: hidden;
-  letter-spacing: -0.01em;
-}
-.sb-brand .sub {
-  font-size: 11px; font-weight: 500;
-  color: var(--text-tertiary);
-  margin-left: 4px;
   letter-spacing: 0;
+  white-space: nowrap;
+  display: flex; align-items: center; gap: 8px;
+}
+.sb-brand .dot {
+  width: 18px; height: 18px; border-radius: 5px;
+  background: var(--accent);
+  display: inline-flex; align-items: center; justify-content: center;
+  color: #fff; font-size: 10px; font-weight: 600;
 }
 .sidebar.collapsed .sb-brand { display: none; }
 .sidebar.collapsed .sb-head { justify-content: center; padding: 14px 0 10px; }
 
+/* 极简搜索框（保留功能，视觉上很轻） */
 .sb-search {
-  margin: 4px 12px 8px;
+  margin: 2px 10px 8px;
   position: relative;
 }
 .sb-search input {
   width: 100%;
-  height: 30px;
+  height: 28px;
   border: 1px solid var(--border);
-  background: rgba(255,255,255,.7);
-  border-radius: 8px;
-  padding: 0 10px 0 30px;
-  font-size: 12.5px;
+  background: #fff;
+  border-radius: 6px;
+  padding: 0 8px 0 28px;
+  font-size: 12px;
   color: var(--text);
   outline: none;
-  transition: border-color .15s, box-shadow .15s, background .15s;
+  transition: border-color .15s;
   font-family: inherit;
 }
 .sb-search input::placeholder { color: var(--text-tertiary); }
-.sb-search input:focus {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-light);
-  background: #fff;
-}
+.sb-search input:focus { border-color: var(--accent); }
 .sb-search svg {
-  position: absolute; left: 9px; top: 50%;
+  position: absolute; left: 8px; top: 50%;
   transform: translateY(-50%);
   color: var(--text-tertiary);
   pointer-events: none;
 }
 .sidebar.collapsed .sb-search { display: none; }
 
+/* 菜单区 */
 .menu {
   flex: 1;
   padding: 4px 8px 12px;
   overflow-y: auto;
   overflow-x: hidden;
 }
-.menu::-webkit-scrollbar { width: 6px; }
-.menu::-webkit-scrollbar-thumb { background: rgba(0,0,0,.15); border-radius: 3px; }
-.menu::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,.25); }
+.menu::-webkit-scrollbar { width: 4px; }
+.menu::-webkit-scrollbar-thumb { background: rgba(0,0,0,.1); border-radius: 2px; }
 
 .menu-label {
-  font-size: 10.5px; font-weight: 600;
+  font-size: 11px; font-weight: 600;
   color: var(--text-tertiary);
-  padding: 8px 10px 4px;
-  letter-spacing: 0.06em;
+  padding: 10px 10px 4px;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
 }
-.sidebar.collapsed .menu-label { display: none; }
+.sidebar.collapsed .menu-label {
+  font-size: 0; padding: 8px 0 4px;
+  text-align: center;
+}
+.sidebar.collapsed .menu-label::after {
+  content: '—'; font-size: 11px; color: var(--text-tertiary);
+}
 
 .menu-item {
   display: flex; align-items: center; gap: 10px;
-  padding: 8px 10px;
-  margin: 1px 0;
-  border-radius: 8px;
+  padding: 6px 10px;
+  border-radius: 6px;
   color: var(--text);
   cursor: pointer;
   font-size: 13px;
+  font-weight: 400;
   text-decoration: none;
   white-space: nowrap;
-  transition: background .15s, color .15s;
+  transition: background .12s;
   user-select: none;
-  position: relative;
   -webkit-tap-highlight-color: transparent;
+  position: relative;
 }
-.menu-item:hover { background: rgba(0,0,0,.05); }
+.menu-item:hover { background: var(--hover-bg); }
 .menu-item.active {
-  background: var(--accent);
-  color: #fff;
+  background: var(--accent-bg);
+  color: var(--accent);
   font-weight: 500;
 }
-.menu-item.active:hover { background: var(--accent); }
-.menu-item.active .menu-icon { color: #fff; }
 .menu-item.active::before {
   content: '';
   position: absolute;
   left: -8px; top: 50%; transform: translateY(-50%);
-  width: 3px; height: 16px;
+  width: 2px; height: 14px;
   background: var(--accent);
-  border-radius: 0 2px 2px 0;
+  border-radius: 0 1.5px 1.5px 0;
 }
 .menu-icon {
-  width: 20px; height: 20px;
+  width: 16px; height: 16px;
   flex-shrink: 0;
   display: flex; align-items: center; justify-content: center;
   color: var(--text-secondary);
 }
+.menu-item.active .menu-icon { color: var(--accent); }
 .menu-text { flex: 1; overflow: hidden; text-overflow: ellipsis; }
 .sidebar.collapsed .menu-text { display: none; }
-.sidebar.collapsed .menu-item { justify-content: center; padding: 8px 0; }
+.sidebar.collapsed .menu-item { justify-content: center; padding: 6px 0; }
 .sidebar.collapsed .menu-item.active::before { display: none; }
 
-/* ── 侧栏底部 ── */
+/* 侧栏底部：极简操作 */
 .sb-foot {
-  padding: 10px 12px 12px;
-  border-top: 1px solid var(--border);
-  display: flex; flex-direction: column; gap: 4px;
+  padding: 8px 8px 10px;
+  border-top: 1px solid var(--sidebar-border);
+  display: flex; flex-direction: column; gap: 1px;
 }
 .foot-btn {
   display: flex; align-items: center; gap: 10px;
-  padding: 7px 10px;
+  padding: 6px 10px;
   border: none;
   background: transparent;
-  border-radius: 8px;
+  border-radius: 6px;
   cursor: pointer;
   color: var(--text-secondary);
   font-size: 12.5px;
-  white-space: nowrap;
-  transition: background .15s, color .15s;
   font-family: inherit;
+  white-space: nowrap;
+  transition: background .12s, color .12s;
 }
-.foot-btn:hover { background: rgba(0,0,0,.05); color: var(--text); }
+.foot-btn:hover { background: var(--hover-bg); color: var(--text); }
 .foot-btn .menu-icon { color: inherit; }
 .sidebar.collapsed .foot-btn .menu-text { display: none; }
-.sidebar.collapsed .foot-btn { justify-content: center; padding: 7px 0; }
+.sidebar.collapsed .foot-btn { justify-content: center; padding: 6px 0; }
 
-/* ── 主内容区 ── */
+/* ── 主区（CodeX 风：无 titlebar，无 toolbar，纯粹白底） ── */
 .content {
   flex: 1;
   display: flex; flex-direction: column;
@@ -296,35 +223,42 @@ body {
   background: var(--content-bg);
 }
 
-/* 工具栏（面包屑 + 操作） */
-.toolbar {
-  height: 38px;
+/* 极简顶部条（替代原 titlebar + toolbar，只剩必要按钮） */
+.mini-bar {
+  height: 36px;
   flex-shrink: 0;
   display: flex; align-items: center;
-  padding: 0 18px;
+  padding: 0 12px;
   border-bottom: 1px solid var(--border);
-  background: rgba(255,255,255,.7);
+  background: #fff;
+  gap: 4px;
 }
-.toolbar-left {
-  display: flex; align-items: center; gap: 6px;
+.mini-title {
   font-size: 12.5px;
   color: var(--text-secondary);
+  margin-right: auto;
+  letter-spacing: 0;
+  display: flex; align-items: center; gap: 6px;
 }
-.toolbar-left .crumb-cur {
-  color: var(--text); font-weight: 500;
+.mini-title b { color: var(--text); font-weight: 500; }
+.mini-title .sep { color: var(--text-tertiary); }
+.mini-btn {
+  width: 26px; height: 24px;
+  border: none; background: transparent;
+  border-radius: 5px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: background .12s, color .12s;
 }
-.toolbar-right {
-  margin-left: auto;
-  display: flex; gap: 4px;
-}
-.toolbar-right .tb-btn { width: 28px; height: 26px; }
+.mini-btn:hover { background: var(--hover-bg); color: var(--text); }
 
-/* iframe 容器 */
+/* iframe 容器（无圆角直接贴边） */
 .frames {
   flex: 1;
   position: relative;
   min-height: 0;
-  background: #F5F5F7;
+  background: var(--bg);
 }
 .tool-frame {
   position: absolute; inset: 0;
@@ -340,167 +274,120 @@ body {
   position: absolute; inset: 0;
   display: flex; flex-direction: column;
   align-items: center; justify-content: center;
-  gap: 8px;
+  gap: 6px;
   color: var(--text-tertiary);
-  font-size: 13px;
-  background: #F5F5F7;
+  font-size: 12.5px;
+  background: #FAFBFC;
 }
 
-/* ── 隐私条（极简） ── */
-.privacy-pill {
-  position: absolute;
-  bottom: 14px; left: 50%; transform: translateX(-50%);
-  background: rgba(255,255,255,.85);
-  -webkit-backdrop-filter: blur(20px);
-  backdrop-filter: blur(20px);
-  border: 1px solid var(--border);
-  color: var(--text-secondary);
-  font-size: 11.5px;
-  padding: 5px 12px;
-  border-radius: 999px;
-  box-shadow: 0 2px 8px rgba(0,0,0,.06);
-  pointer-events: none;
-  z-index: 50;
+/* 底部极简行（替代原 privacy-pill） */
+.foot-line {
+  height: 24px;
+  flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px;
+  color: var(--text-tertiary);
+  border-top: 1px solid var(--border);
+  background: #FAFBFC;
 }
 
 /* ── 移动端 ── */
 @media (max-width: 768px) {
-  .desktop { padding: 0; }
-  .window {
-    border-radius: 0;
-    height: 100vh;
-    max-height: none;
-    box-shadow: none;
-    border: none;
-  }
   .sidebar {
     position: fixed; left: 0; top: 0; bottom: 0; z-index: 100;
     transform: translateX(-100%);
-    transition: transform .25s ease;
-    box-shadow: 0 0 40px rgba(0,0,0,.25);
+    transition: transform .2s ease;
+    box-shadow: 0 0 24px rgba(0,0,0,.15);
     width: 260px;
   }
   .sidebar.mobile-open { transform: translateX(0); }
   .sidebar.collapsed { width: 260px; transform: translateX(-100%); }
   .sidebar.collapsed.mobile-open { transform: translateX(0); }
-  .sidebar.collapsed .menu-text { display: block; }
-  .sidebar.collapsed .menu-item { justify-content: flex-start; padding: 8px 10px; }
-  .sidebar.collapsed .sb-brand { display: block; }
-  .sidebar.collapsed .sb-search { display: block; }
+  .sidebar.collapsed .menu-text,
+  .sidebar.collapsed .sb-brand,
+  .sidebar.collapsed .sb-search,
+  .sidebar.collapsed .foot-btn .menu-text { display: revert; }
   .sidebar.collapsed .sb-head { justify-content: flex-start; padding: 14px 14px 10px; }
-  .sidebar.collapsed .menu-label { display: block; }
-  .sidebar.collapsed .foot-btn .menu-text { display: block; }
-  .sidebar.collapsed .foot-btn { justify-content: flex-start; padding: 7px 10px; }
-  .mask {
-    position: fixed; inset: 0; z-index: 90;
-    background: rgba(0,0,0,.35);
-    display: none;
-  }
+  .sidebar.collapsed .menu-label { font-size: 11px; padding: 10px 10px 4px; text-align: left; }
+  .sidebar.collapsed .menu-label::after { content: ''; }
+  .sidebar.collapsed .menu-item,
+  .sidebar.collapsed .foot-btn { justify-content: flex-start; padding: 6px 10px; }
+  .mask { position: fixed; inset: 0; z-index: 90; background: rgba(0,0,0,.35); display: none; }
   .mask.show { display: block; }
 }
-
-/* ── 窗口载入动效（全屏去掉了，仅保留极轻微淡入） ── */
-@keyframes fade-in {
-  from { opacity: 0; }
-  to   { opacity: 1; }
-}
-.window { animation: fade-in .2s ease; }
 </style>
 </head>
 <body>
-<div class="desktop">
-  <div class="window">
-    <!-- 顶部 macOS 装饰条 -->
-    <div class="titlebar">
-      <div class="tb-dots">
-        <span class="tb-dot red" title="关闭（装饰）"></span>
-        <span class="tb-dot yellow" title="最小化（装饰）"></span>
-        <span class="tb-dot green" title="最大化（装饰）"></span>
+<div class="app">
+  <aside class="sidebar" id="sidebar">
+    <div class="sb-head">
+      <div class="sb-brand"><span class="dot">W</span><span>工作台</span></div>
+    </div>
+    <div class="sb-search">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+      <input type="text" placeholder="搜索工具" id="sb-search">
+    </div>
+    <nav class="menu" id="menu">
+      <div class="menu-label">工 具</div>
+      <a class="menu-item active" data-tool="slhy" href="javascript:void(0)">
+        <span class="menu-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-9-9c2.45 0 4.74.96 6.44 2.56L21 8"/><path d="M21 3v5h-5"/></svg></span>
+        <span class="menu-text">三流合一核对</span>
+      </a>
+      <a class="menu-item" data-tool="customs" href="javascript:void(0)">
+        <span class="menu-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8"/><path d="M8 17h5"/></svg></span>
+        <span class="menu-text">报关单转换</span>
+      </a>
+      <a class="menu-item" data-tool="vat" href="javascript:void(0)">
+        <span class="menu-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 15l4-6 4 4 5-8"/><path d="M17 9h4v4"/></svg></span>
+        <span class="menu-text">增值税申报核对</span>
+      </a>
+      <a class="menu-item" data-tool="liangdan" href="javascript:void(0)">
+        <span class="menu-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 12h6"/><path d="M9 16h6"/><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg></span>
+        <span class="menu-text">粮单自动化</span>
+      </a>
+    </nav>
+    <div class="sb-foot">
+      <button class="foot-btn" id="openNew2">
+        <span class="menu-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3h7v7"/><path d="M21 3l-9 9"/></svg></span>
+        <span class="menu-text">新窗口打开</span>
+      </button>
+      <button class="foot-btn" id="collapseBtn">
+        <span class="menu-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4l-7 8 7 8"/><path d="M4 12h16"/></svg></span>
+        <span class="menu-text">收起侧栏</span>
+      </button>
+    </div>
+  </aside>
+  <div class="mask" id="mask"></div>
+
+  <div class="content">
+    <div class="mini-bar">
+      <div class="mini-title" id="tb-title"><b>工作台</b><span class="sep">›</span><span id="crumb-cur">三流合一核对</span></div>
+      <button class="mini-btn" id="refreshTool" title="刷新当前工具">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg>
+      </button>
+      <button class="mini-btn" id="openNew" title="在新窗口打开">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3h7v7"/><path d="M21 3l-9 9"/><path d="M21 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5"/></svg>
+      </button>
+    </div>
+    <div class="frames">
+      <div class="tool-frame active" id="frame-slhy">
+        <div class="placeholder" id="ph-slhy">正在加载 三流合一核对 …</div>
+        <iframe data-url="" title="三流合一核对" allow="clipboard-write"></iframe>
       </div>
-      <div class="tb-title" id="tb-title"><b>工作台</b></div>
-      <div class="tb-actions">
-        <button class="tb-btn" id="refreshTool" title="刷新当前工具">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg>
-        </button>
-        <button class="tb-btn" id="openNew" title="在新窗口打开">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3h7v7"/><path d="M21 3l-9 9"/><path d="M21 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5"/></svg>
-        </button>
-        <button class="tb-btn" id="collapseBtn" title="收起/展开侧边栏">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4l-7 8 7 8"/><path d="M4 12h16"/></svg>
-        </button>
+      <div class="tool-frame" id="frame-customs">
+        <div class="placeholder" id="ph-customs">点击侧边栏「报关单转换」后加载</div>
+        <iframe data-url="" title="报关单转换" allow="clipboard-write"></iframe>
+      </div>
+      <div class="tool-frame" id="frame-vat">
+        <div class="placeholder" id="ph-vat">点击侧边栏「增值税申报核对」后加载</div>
+        <iframe data-url="" title="增值税申报核对" allow="clipboard-write"></iframe>
+      </div>
+      <div class="tool-frame" id="frame-liangdan">
+        <div class="placeholder" id="ph-liangdan">点击侧边栏「粮单自动化」后加载（需本地后端 8765 端口运行）</div>
+        <iframe data-url="" title="粮单自动化" allow="clipboard-write"></iframe>
       </div>
     </div>
-
-    <!-- 主体 -->
-    <div class="body">
-      <!-- 侧边栏 -->
-      <aside class="sidebar" id="sidebar">
-        <div class="sb-head">
-          <div class="sb-brand">工作台<span class="sub">Workspace</span></div>
-        </div>
-        <div class="sb-search">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
-          <input type="text" placeholder="搜索工具" id="sb-search">
-        </div>
-        <nav class="menu" id="menu">
-          <div class="menu-label">工 具</div>
-          <a class="menu-item active" data-tool="slhy" href="javascript:void(0)">
-            <span class="menu-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-9-9c2.45 0 4.74.96 6.44 2.56L21 8"/><path d="M21 3v5h-5"/></svg></span>
-            <span class="menu-text">三流合一核对</span>
-          </a>
-          <a class="menu-item" data-tool="customs" href="javascript:void(0)">
-            <span class="menu-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8"/><path d="M8 17h5"/></svg></span>
-            <span class="menu-text">报关单转换</span>
-          </a>
-          <a class="menu-item" data-tool="vat" href="javascript:void(0)">
-            <span class="menu-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 15l4-6 4 4 5-8"/><path d="M17 9h4v4"/></svg></span>
-            <span class="menu-text">增值税申报核对</span>
-          </a>
-          <a class="menu-item" data-tool="liangdan" href="javascript:void(0)">
-            <span class="menu-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 12h6"/><path d="M9 16h6"/><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg></span>
-            <span class="menu-text">粮单自动化</span>
-          </a>
-        </nav>
-        <div class="sb-foot">
-          <button class="foot-btn" id="openNew2">
-            <span class="menu-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3h7v7"/><path d="M21 3l-9 9"/></svg></span>
-            <span class="menu-text">新窗口打开</span>
-          </button>
-        </div>
-      </aside>
-      <div class="mask" id="mask"></div>
-
-      <!-- 主内容 -->
-      <div class="content">
-        <div class="toolbar">
-          <div class="toolbar-left" id="toolbar-left">
-            <span>工作台</span>
-            <span style="opacity:.5">›</span>
-            <span class="crumb-cur" id="crumb-cur">三流合一核对</span>
-          </div>
-          <div class="toolbar-right"></div>
-        </div>
-        <div class="frames">
-          <div class="tool-frame active" id="frame-slhy">
-            <div class="placeholder" id="ph-slhy">正在加载 三流合一核对 …</div>
-            <iframe data-url="" title="三流合一核对" allow="clipboard-write"></iframe>
-          </div>
-          <div class="tool-frame" id="frame-customs">
-            <div class="placeholder" id="ph-customs">点击侧边栏「报关单转换」后加载</div>
-            <iframe data-url="" title="报关单转换" allow="clipboard-write"></iframe>
-          </div>
-          <div class="tool-frame" id="frame-vat">
-            <div class="placeholder" id="ph-vat">点击侧边栏「增值税申报核对」后加载</div>
-            <iframe data-url="" title="增值税申报核对" allow="clipboard-write"></iframe>
-          </div>
-          <div class="tool-frame" id="frame-liangdan">
-            <div class="placeholder" id="ph-liangdan">点击侧边栏「粮单自动化」后加载（需本地后端 8765 端口运行）</div>
-            <iframe data-url="" title="粮单自动化" allow="clipboard-write"></iframe>
-          </div>
-          <div class="privacy-pill">🔒 数据仅在本机处理，不会上传到任何服务器</div>
-        </div>
-      </div>
-    </div>
+    <div class="foot-line">🔒 数据仅在本机处理，不会上传到任何服务器</div>
   </div>
 </div>
 
@@ -508,8 +395,6 @@ body {
 (function () {
   'use strict';
 
-  // 纯前端：四个工具均为本地静态页面，无端口配置
-  // liangdan 依赖本地 Python 后端 http://127.0.0.1:8765（app.py，需单独启动）
   var TOOLS = {
     slhy:     { url: 'slhy-v4/index.html',               label: '三流合一核对',   crumb: '三流合一核对' },
     customs:  { url: 'customs/index.html',                label: '报关单转换',     crumb: '报关单转换' },
@@ -544,27 +429,22 @@ body {
   function switchTool(key) {
     if (!TOOLS[key]) return;
     current = key;
-    // 菜单高亮
     document.querySelectorAll('.menu-item').forEach(function (el) {
       el.classList.toggle('active', el.getAttribute('data-tool') === key);
     });
-    // 面板切换（隐藏的 iframe 保留状态，不重复加载）
     ORDER.forEach(function (k) {
       var f = document.getElementById('frame-' + k);
       if (k === key) { f.classList.add('active'); loadFrame(k); }
       else f.classList.remove('active');
     });
-    // 顶部标题 + 面包屑
     document.title = TOOLS[key].label + ' · 工作台';
     var tbt = document.getElementById('tb-title');
-    if (tbt) tbt.innerHTML = '<b>工作台</b> · ' + TOOLS[key].crumb;
+    if (tbt) tbt.innerHTML = '<b>工作台</b><span class="sep">›</span><span>' + TOOLS[key].crumb + '</span>';
     var cc = document.getElementById('crumb-cur');
     if (cc) cc.textContent = TOOLS[key].crumb;
-    // 记忆选择
     try { localStorage.setItem(STORE_KEY, key); } catch (e) {}
   }
 
-  // 菜单点击
   document.querySelectorAll('.menu-item').forEach(function (el) {
     el.addEventListener('click', function () {
       switchTool(el.getAttribute('data-tool'));
@@ -578,13 +458,13 @@ body {
     sidebar.classList.toggle('collapsed', isCollapsed);
   });
 
-  // 新窗口打开（顶部按钮 + 侧栏底部按钮同源）
+  // 新窗口打开（顶部 + 侧栏底部）
   function openCurrent() { window.open(TOOLS[current].url, '_blank'); }
   document.getElementById('openNew').addEventListener('click', openCurrent);
   var on2 = document.getElementById('openNew2');
   if (on2) on2.addEventListener('click', openCurrent);
 
-  // 刷新当前工具（跨域 iframe 不能用 contentWindow.reload，改为重新赋值 src）
+  // 刷新
   document.getElementById('refreshTool').addEventListener('click', function () {
     var frame = document.querySelector('#frame-' + current + ' iframe');
     var url = buildUrl(current);
@@ -592,7 +472,7 @@ body {
     setTimeout(function () { frame.src = url; }, 60);
   });
 
-  // 搜索框：按 menu-item 文本过滤
+  // 搜索框过滤
   var search = document.getElementById('sb-search');
   if (search) {
     search.addEventListener('input', function () {
@@ -605,7 +485,6 @@ body {
     });
   }
 
-  // 初始化：恢复上次选择
   var saved = null;
   try { saved = localStorage.getItem(STORE_KEY); } catch (e) {}
   if (saved && TOOLS[saved]) current = saved;
