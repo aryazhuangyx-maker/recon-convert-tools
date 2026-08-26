@@ -456,6 +456,10 @@ body {
             <span class="menu-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 15l4-6 4 4 5-8"/><path d="M17 9h4v4"/></svg></span>
             <span class="menu-text">增值税申报核对</span>
           </a>
+          <a class="menu-item" data-tool="liangdan" href="javascript:void(0)">
+            <span class="menu-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 12h6"/><path d="M9 16h6"/><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg></span>
+            <span class="menu-text">粮单自动化</span>
+          </a>
         </nav>
         <div class="sb-foot">
           <button class="foot-btn" id="openNew2">
@@ -489,6 +493,10 @@ body {
             <div class="placeholder" id="ph-vat">点击侧边栏「增值税申报核对」后加载</div>
             <iframe data-url="" title="增值税申报核对" allow="clipboard-write"></iframe>
           </div>
+          <div class="tool-frame" id="frame-liangdan">
+            <div class="placeholder" id="ph-liangdan">点击侧边栏「粮单自动化」后加载（需本地后端 8765 端口运行）</div>
+            <iframe data-url="" title="粮单自动化" allow="clipboard-write"></iframe>
+          </div>
           <div class="privacy-pill">🔒 数据仅在本机处理，不会上传到任何服务器</div>
         </div>
       </div>
@@ -500,17 +508,19 @@ body {
 (function () {
   'use strict';
 
-  // 纯前端：三个工具均为本地静态页面，无端口配置
+  // 纯前端：四个工具均为本地静态页面，无端口配置
+  // liangdan 依赖本地 Python 后端 http://127.0.0.1:8765（app.py，需单独启动）
   var TOOLS = {
-    slhy:    { url: 'slhy-v4/index.html',              label: '三流合一核对',   crumb: '三流合一核对' },
-    customs: { url: 'customs/index.html',               label: '报关单转换',     crumb: '报关单转换' },
-    vat:     { url: 'vat/增值税申报数据核对工具.html',     label: '增值税申报核对', crumb: '增值税申报核对' }
+    slhy:     { url: 'slhy-v4/index.html',               label: '三流合一核对',   crumb: '三流合一核对' },
+    customs:  { url: 'customs/index.html',                label: '报关单转换',     crumb: '报关单转换' },
+    vat:      { url: 'vat/增值税申报数据核对工具.html',      label: '增值税申报核对', crumb: '增值税申报核对' },
+    liangdan: { url: 'http://127.0.0.1:8765/',            label: '粮单自动化',     crumb: '粮单自动化' }
   };
-  var ORDER = ['slhy', 'customs', 'vat'];
+  var ORDER = ['slhy', 'customs', 'vat', 'liangdan'];
   var STORE_KEY = 'portal_active_tool';
 
   var current = 'slhy';
-  var loaded = { slhy: false, customs: false, vat: false };
+  var loaded = { slhy: false, customs: false, vat: false, liangdan: false };
   var isCollapsed = false;
 
   var sidebar = document.getElementById('sidebar');
