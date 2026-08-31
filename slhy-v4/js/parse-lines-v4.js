@@ -1,7 +1,7 @@
 // parse-lines.js — app.py 行解析器直译
-import { fuzzyMatchSpec, toSimp, isLikelyQuantity, isLikelyUnitPrice, UNIT_PRICE_MAX, UNIT_PRICE_MIN } from './mapping.js';
-import { normalizeQuantity, rawNumberTokens } from './quantity.js';
-import { matchProductName, correctUnit, inferUnitFromLine, getAliasIndex } from './whitelist.js';
+import { fuzzyMatchSpec, toSimp, isLikelyQuantity, isLikelyUnitPrice, UNIT_PRICE_MAX, UNIT_PRICE_MIN } from './mapping.js?v=20260826q';
+import { normalizeQuantity, rawNumberTokens } from './quantity.js?v=20260826q';
+import { matchProductName, correctUnit, inferUnitFromLine, getAliasIndex } from './whitelist.js?v=20260826q';
 function safeFloat2(val, def = 0.0) {
   if (typeof val === 'string') val = val.replace(/,/g, '').replace(/，/g, '').trim();
   if (val === null || val === undefined || val === '' || val === 'nan') return def;

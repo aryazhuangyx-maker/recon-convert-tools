@@ -1,7 +1,7 @@
 // reconcile.js — app.py _build_reconcile_groups 直译（三流核对引擎）
-import { fuzzyMatchSpec, specsMatch, isCableSpec, parseSpec, productsMatch, normalizeProductName } from './mapping.js';
-import { normContractNo, fuzzyContractNoMatch } from './contract-no.js';
-import { matchProductName } from './whitelist.js';
+import { fuzzyMatchSpec, specsMatch, isCableSpec, parseSpec, productsMatch, normalizeProductName } from './mapping.js?v=20260826q';
+import { normContractNo, fuzzyContractNoMatch } from './contract-no.js?v=20260826q';
+import { matchProductName } from './whitelist.js?v=20260826q';
 export function safeFloat(val, def = 0.0) {
   if (typeof val === 'string') val = val.replace(/,/g, '').replace(/，/g, '').trim();
   if (val === null || val === undefined || val === '' || val === 'nan') return def;

@@ -1,5 +1,5 @@
 // extract.js — 识别层（pdf.js 文字层 + Tesseract.js OCR + 双路合并）
-import { applyGarbleFix, learnGarbleFixes } from './garble.js';
+import { applyGarbleFix, learnGarbleFixes } from './garble.js?v=20260826q';
 export const OCR_LABEL_ALLOWLIST = new Set([
   '數量', '数量', '單位', '单位', '單价', '单价', '總价', '总价', '金額', '金额',
   '合計', '合计', '客戶', '客户', '供方', '收貨', '收货', '送貨', '送货',

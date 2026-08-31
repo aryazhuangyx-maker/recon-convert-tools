@@ -1,7 +1,7 @@
 /**
  * 内销开票核对工具 — 前端交互逻辑
  */
-import { getSession, clearSession } from './storage.js';
+import { getSession, clearSession } from './storage.js?v=20260826q';
 
 const MAX_FILES = 10;
 let sessionId = null;

@@ -1,10 +1,10 @@
 // frontend-api.js — 本地 API 层
-import * as storage from './storage.js';
-import { parseContractLedger, parseExcel, setXLSX } from './parse-excel.js?v=20260825i';
-import { runExtract } from './ocr-doc.js?v=20260825i';
-import { buildReconcileGroups } from './reconcile.js?v=20260825i';
-import { loadGarbleFix, getGarbleFix } from './garble.js';
-import { loadWhitelist } from './whitelist.js';
+import * as storage from './storage.js?v=20260826q';
+import { parseContractLedger, parseExcel, setXLSX } from './parse-excel.js?v=20260826q';
+import { runExtract } from './ocr-doc.js?v=20260826q';
+import { buildReconcileGroups } from './reconcile.js?v=20260826q';
+import { loadGarbleFix, getGarbleFix } from './garble.js?v=20260826q';
+import { loadWhitelist } from './whitelist.js?v=20260826q';
 export async function initFrontend() {
   const wlResp = await fetch('data/whitelist.json');
   loadWhitelist(await wlResp.json());

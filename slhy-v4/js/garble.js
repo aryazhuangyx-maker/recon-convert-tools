@@ -1,5 +1,5 @@
 // garble.js — app.py 错字词典 直译（清洗版：不含公司名条目）
-import { normalizeDiameterSymbol } from './mapping.js';
+import { normalizeDiameterSymbol } from './mapping.js?v=20260826q';
 const GARBLE_FIX_BASE = {
   '敷量': '數量', '聊络': '聯絡', '料怯': '科技', '覃位': '單位',
   '收货覃位': '收货單位', '客户聊络人': '客户聯絡人',

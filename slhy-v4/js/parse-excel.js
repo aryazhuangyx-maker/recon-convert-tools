@@ -1,7 +1,7 @@
 // parse-excel.js — SheetJS 台账/Excel 解析
-import { fuzzyMatchSpec, MATERIAL_SPEC_MAP } from './mapping.js';
-import { normContractNo, extractContractNo } from './contract-no.js';
-import { applyWhitelistConstraints } from './whitelist.js';
+import { fuzzyMatchSpec, MATERIAL_SPEC_MAP } from './mapping.js?v=20260826q';
+import { normContractNo, extractContractNo } from './contract-no.js?v=20260826q';
+import { applyWhitelistConstraints } from './whitelist.js?v=20260826q';
 let XLSX = null;
 export function setXLSX(lib) { XLSX = lib; }
 function getXLSX() { if (!XLSX) throw new Error('XLSX 未初始化'); return XLSX; }

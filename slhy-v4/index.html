@@ -9,18 +9,33 @@
 <title>内销开票核对工具</title>
 <script>
 // 版本自检：每次加载时检查 version.json，发现新版本则强制刷新（解决模块映射表缓存）
+// 兜底：fetch 失败时若 localStorage 中残留旧版标记与页面内嵌硬编码版本不一致，强制 reload 一次（防旧缓存自锁）
 (function() {
   var KEY = 'slhy_v4_ver';
+  var PAGE_VER = '20260826q'; // 与 version.json 同步；升版时一并更新
+  function reloadOnce() {
+    try { caches && caches.keys && caches.keys().then(function(ks) { ks.forEach(function(k) { caches.delete(k); }); }); } catch(e) {}
+    location.reload(true);
+  }
   fetch('version.json?_=' + Date.now()).then(function(r) { return r.json(); }).then(function(v) {
     var cached = localStorage.getItem(KEY);
     if (cached && cached !== v.version) {
       localStorage.removeItem(KEY);
-      // 清除所有缓存存储
-      try { caches && caches.keys && caches.keys().then(function(ks) { ks.forEach(function(k) { caches.delete(k); }); }); } catch(e) {}
-      location.reload(true);
+      reloadOnce();
     }
     localStorage.setItem(KEY, v.version);
-  }).catch(function() {});
+  }).catch(function() {
+    // fetch 失败（弱网/CDN 抽风）兜底：若 localStorage 残留与页面硬编码版本不一致，认为是旧缓存卡住
+    var cached = localStorage.getItem(KEY);
+    if (cached && cached !== PAGE_VER) {
+      console.warn('[slhy-v4] version.json fetch failed, but localStorage shows stale version; reloading');
+      localStorage.removeItem(KEY);
+      reloadOnce();
+    } else {
+      // 静默降级：写入当前硬编码版（避免下次仍误判）
+      try { localStorage.setItem(KEY, PAGE_VER); } catch(e) {}
+    }
+  });
 })();
 </script>
 <link href="vendor/bootstrap.min.css" rel="stylesheet">
@@ -618,10 +633,10 @@ alert('✅ 上传成功！已加载 '+cnt+' 个合同，台账名称：'+nm);})
 window._uploadMappingFile=null;
 })();
 </script>
-<script src="vendor/bootstrap.bundle.min.js?v=20260826p"></script>
-<script src="vendor/xlsx.full.min.js?v=20260826p"></script>
-<script src="vendor/tesseract.min.js?v=20260826p"></script>
-<script type="module" src="js/app-front.js?v=20260826p"></script>
+<script src="vendor/bootstrap.bundle.min.js?v=20260826q"></script>
+<script src="vendor/xlsx.full.min.js?v=20260826q"></script>
+<script src="vendor/tesseract.min.js?v=20260826q"></script>
+<script type="module" src="js/app-front.js?v=20260826q"></script>
 
 <!-- 手动选合同弹窗 -->
 <div class="modal fade" id="contract-picker-modal" tabindex="-1">

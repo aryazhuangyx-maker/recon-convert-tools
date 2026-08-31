@@ -1,6 +1,6 @@
 // whitelist.js — app.py 白名单约束式提取 直译
-import { normalizeProductName, toSimp } from './mapping.js';
-import { normalizeQuantity, setQuantityNorm } from './quantity.js';
+import { normalizeProductName, toSimp } from './mapping.js?v=20260826q';
+import { normalizeQuantity, setQuantityNorm } from './quantity.js?v=20260826q';
 let WHITELIST = {};
 let PRODUCT_ALIAS_INDEX = {};
 let UNIT_VALID = new Set();

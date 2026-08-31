@@ -1,5 +1,5 @@
 // contract-no.js — app.py _extract_contract_no / _norm_contract_no / _fuzzy_contract_no_match 直译
-import { toSimp } from './mapping.js';
+import { toSimp } from './mapping.js?v=20260826q';
 export function extractContractNo(text) {
   if (!text) return [];
   const norm = text.replace(/ /g, '').replace(/\u3000/g, '');
