@@ -87,6 +87,28 @@ export function parseSpec(spec) {
 }
 function diametersInRange(diameters, lo, hi) { return diameters.some((d) => lo <= d && d <= hi); }
 function rangesOverlap(lo1, hi1, lo2, hi2) { return lo1 <= hi2 && lo2 <= hi1; }
+// ── 型材/板材规格（尺寸串 * 形式，如 365*100*16 Q355B / 1.5*1500*6000 DX51D+Z80）──
+// 这类规格不能退化成"钢筋直径"比较（否则 365*100*16 与 350*150*16 会因都含 16 而误判同规格）
+const DIM_SPEC_RE = /\d+(?:\.\d+)?(?:\s*[*×xX]\s*\d+(?:\.\d+)?){1,}/;
+export function isDimSpec(s) {
+  return !!s && DIM_SPEC_RE.test(String(s));
+}
+function splitDimSpec(s) {
+  const t = String(s).replace(/\s+/g, ' ').trim().toUpperCase();
+  const m = t.match(DIM_SPEC_RE);
+  const dims = m ? m[0].replace(/\s*[*×xX]\s*/g, '*') : '';
+  const rest = t.replace(DIM_SPEC_RE, ' ').replace(/[,，;；]/g, ' ').replace(/\s+/g, ' ').trim();
+  return { dims, rest };
+}
+function dimSpecsMatch(a, b) {
+  const sa = splitDimSpec(a), sb = splitDimSpec(b);
+  if (!sa.dims || !sb.dims) return false;
+  if (sa.dims !== sb.dims) return false;                 // 尺寸串必须完全一致
+  if (!sa.rest || !sb.rest) return true;                 // 一方未写材质 → 按尺寸判定
+  if (sa.rest === sb.rest) return true;
+  // 材质前缀包含：Q355B ↔ Q355、DX51D+Z80 ↔ DX51D
+  return sa.rest.startsWith(sb.rest) || sb.rest.startsWith(sa.rest);
+}
 function specContainsParsed(text, parsed) {
   const t = text.toLowerCase().replace(/ /g, '');
   if (parsed.is_range) {
@@ -152,6 +174,8 @@ export function specsMatch(specA, specB) {
   const a = String(specA).trim(), b = String(specB).trim();
   if (a.toLowerCase() === b.toLowerCase()) return true;
   if (isCableSpec(a) || isCableSpec(b)) return cableSpecsMatch(a, b);
+  // 型材/板材（含 * 尺寸串）：按「尺寸全等 + 材质前缀」比对，避免退化成直径比较
+  if (isDimSpec(a) && isDimSpec(b)) return dimSpecsMatch(a, b);
   const COIL_KW = ['盘螺', '盤螺', '热轧螺纹钢筋'];
   const aCoil = COIL_KW.some((k) => a.includes(k)), bCoil = COIL_KW.some((k) => b.includes(k));
   if (aCoil && bCoil) return true;

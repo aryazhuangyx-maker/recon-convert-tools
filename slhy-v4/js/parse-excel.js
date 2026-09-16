@@ -1,7 +1,7 @@
 // parse-excel.js — SheetJS 台账/Excel 解析
-import { fuzzyMatchSpec, MATERIAL_SPEC_MAP } from './mapping.js?v=20260826q';
-import { normContractNo, extractContractNo } from './contract-no.js?v=20260826q';
-import { applyWhitelistConstraints } from './whitelist.js?v=20260826q';
+import { fuzzyMatchSpec, MATERIAL_SPEC_MAP } from './mapping.js?v=20260915e';
+import { normContractNo, extractContractNo } from './contract-no.js?v=20260915e';
+import { applyWhitelistConstraints } from './whitelist.js?v=20260915e';
 let XLSX = null;
 export function setXLSX(lib) { XLSX = lib; }
 function getXLSX() { if (!XLSX) throw new Error('XLSX 未初始化'); return XLSX; }
@@ -30,6 +30,8 @@ export function parseContractLedger(arrayBuffer) {
     '备注': ['备注', '说明', '摘要'],
   };
   const NAME_BLOCK = ['报关'];
+  // ⚠️ 合计/总计行（透视表末行等）不是合约，不能建 key（2026-09-15 修复）
+  const MERGE_ROW_RE = /^(总[计計]|合[计計]|小[计計]|汇[总總]|汇总|total|subtotal|sum)$/i;
   let wb;
   // ⚠️ 浏览器 file.arrayBuffer() 返回 ArrayBuffer，但 type: 'array' 需要 Uint8Array
   const input = (arrayBuffer instanceof ArrayBuffer || (typeof SharedArrayBuffer !== 'undefined' && arrayBuffer instanceof SharedArrayBuffer))
@@ -67,16 +69,19 @@ export function parseContractLedger(arrayBuffer) {
       continue;
     }
     const cnoCol = colIndex['合同编号'];
+    const sheetLines = [];
+    let sheetLastCno = lastCno;
     for (let i = headerRow + 1; i < df.length; i++) {
       const row = df[i] || [];
       if (!row.some((v) => notNa(v))) continue;
       const firstVal = notNa(row[0]) ? String(row[0]) : '';
-      if (firstVal.includes('合计') || firstVal.includes('小计')) continue;
+      if (firstVal.includes('合计') || firstVal.includes('小计') || firstVal.includes('总计')) continue;
       let rawCno = '';
       if (cnoCol < row.length && notNa(row[cnoCol])) rawCno = String(row[cnoCol]).trim();
-      const cno = rawCno ? normContractNo(rawCno) : lastCno;
+      if (rawCno && MERGE_ROW_RE.test(normContractNo(rawCno))) continue;  // 「总计」不当合约
+      const cno = rawCno ? normContractNo(rawCno) : sheetLastCno;
       if (!cno) continue;
-      lastCno = cno;
+      sheetLastCno = cno;
       const dispCno = rawCno || cno;
       const line = { '货物名称': '', '规格': '', '数量': 0.0, '单位': '', '单价': 0.0, '金额': 0.0, '备注': '', '合约编号': dispCno, _norm_cno: cno };
       for (const stdName in colIndex) {
@@ -89,8 +94,17 @@ export function parseContractLedger(arrayBuffer) {
         else line[stdName] = safeFloat(val);
       }
       if (!line['货物名称'] && line['数量'] <= 0) continue;
-      allLines.push(line);
+      sheetLines.push(line);
     }
+    if (!sheetLines.length) continue;
+    // ⚠️ 2026-09-15 修复：只取「第一个有效台账 sheet」，不再把所有 sheet 合并
+    // （工作簿常含 透视表/辅助 sheet，合并后同一合约被重复计数：
+    //   例 GDHL-SC(26)-041 主表 20 行 + 透视表 20 行 + 辅助表 28 行 = 68 行 / 数量 ×3）
+    allLines.push(...sheetLines);
+    lastCno = sheetLastCno;
+    result._diag.usedSheet = sheetName;
+    result._diag.skippedSheets = wb.SheetNames.slice(wb.SheetNames.indexOf(sheetName) + 1);
+    break;
   }
   if (allLines.length) {
     result.review_flags = applyWhitelistConstraints(allLines, '');

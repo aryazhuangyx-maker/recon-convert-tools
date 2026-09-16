@@ -1,7 +1,7 @@
 // parse-lines.js — app.py 行解析器直译
-import { fuzzyMatchSpec, toSimp, isLikelyQuantity, isLikelyUnitPrice, UNIT_PRICE_MAX, UNIT_PRICE_MIN } from './mapping.js?v=20260826q';
-import { normalizeQuantity, rawNumberTokens } from './quantity.js?v=20260826q';
-import { matchProductName, correctUnit, inferUnitFromLine, getAliasIndex } from './whitelist.js?v=20260826q';
+import { fuzzyMatchSpec, toSimp, isLikelyQuantity, isLikelyUnitPrice, UNIT_PRICE_MAX, UNIT_PRICE_MIN } from './mapping.js?v=20260915e';
+import { normalizeQuantity, rawNumberTokens } from './quantity.js?v=20260915e';
+import { matchProductName, correctUnit, inferUnitFromLine, getAliasIndex } from './whitelist.js?v=20260915e';
 function safeFloat2(val, def = 0.0) {
   if (typeof val === 'string') val = val.replace(/,/g, '').replace(/，/g, '').trim();
   if (val === null || val === undefined || val === '' || val === 'nan') return def;
@@ -26,6 +26,144 @@ function nearDup(lastKey, lastIdx, key, lineIdx) {
 }
 const ROLL_RE = /(\d+(?:\.\d+)?)\s*(?:m|M|米)?\s*\/([卷盘捲盤圈])/;
 const ROLL_RE_G = /(\d+(?:\.\d+)?)\s*(?:m|M|米)?\s*\/([卷盘捲盤圈])/g;
+// ── 型材/板材解析器（2026-09-15 新增；同日二次修正：适配浏览器真实行结构）──
+// 覆盖：方矩管 / 槽钢 / 角钢 / 工字钢 / 钢板 / 镀锌板 等
+//
+// ⚠️ 二次修正原因：extract.js 的文字层是 pdf.js 取词后由 tlWordsToLines 按 y 坐标
+//   合并成行（|Δy| <= 6 归为同一行），所以同一表格行的各单元格会被合并成【一整行】，
+//   并不是"每个字段独占一行"：
+//     送货单  ：`1 方形鋼管 200*100*10 Q355B 9.9500 噸 20支`
+//     形式发票：`1 方形鋼管 200*100*10 Q355 9.950 噸 4,423.000 44,008.85`
+//   上一版按"每字段独占一行"写 → 真实文档解析出 0 行。故改为以单行表格行为主。
+const STEEL_KW = /鋼管|钢管|方矩|矩形管|方管|槽钢|槽鋼|角钢|角鋼|工字|H型钢|h型钢|鋼板|钢板|镀锌|鍍鋅|型钢|型鋼|扁钢|扁鋼|圓鋼|圆钢|不鏽鋼|不锈钢|檩条|C型钢|Z型钢/;
+const STEEL_UNIT_RE = /^(噸|吨|千克|公斤|米|m|支|件|块|塊|套|个|個|张|張|卷|捆|根|条|條|片)$/;
+const STEEL_SIZE_RE = /\d+(?:\.\d+)?\s*[*×xX]\s*\d+(?:\.\d+)?/;
+const STEEL_NUM_RE = /^\d[\d,]*(?:\.\d+)?$/;
+const STEEL_INT_RE = /^\d{1,3}$/;
+// 规格规范化：只在数字之间的 x/X 转 *（保护 DX51D / Z80 这类材质牌号），保留逗号
+export function normSteelSpec(s) {
+  return String(s || '')
+    .replace(/\u3000/g, ' ')
+    .replace(/(\d)\s*[×xX]\s*(?=\d)/g, '$1*')
+    .replace(/\s*\*\s*/g, '*')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toUpperCase();
+}
+// 【主】单行表格行解析：`序号 货物名称 规格 数量 单位 [备注] [单价 总价]`
+export function parseSteelLineRows(text, docType = 'delivery') {
+  const products = [];
+  let lastSeq = 0;
+  for (const raw0 of String(text).split('\n')) {
+    const raw = raw0.replace(/\u3000/g, ' ').replace(/\s+/g, ' ').trim();
+    if (!raw) continue;
+    const toks = raw.split(' ');
+    if (toks.length < 4) continue;
+    if (!STEEL_INT_RE.test(toks[0])) continue;          // 必须由序号开头
+    const seq = parseInt(toks[0], 10);
+    if (!products.length) { if (seq !== 1) continue; }  // 首行必须是 1
+    else if (seq <= lastSeq) continue;                  // 之后严格递增
+    // 定位「数量 + 单位」：单位前必须是数字（兼容 `3.3800吨` 粘连写法）
+    let qIdx = -1, uIdx = -1, glued = null;
+    for (let i = 1; i < toks.length; i++) {
+      const t = toks[i];
+      if (STEEL_NUM_RE.test(t) && i + 1 < toks.length && STEEL_UNIT_RE.test(toks[i + 1])) {
+        qIdx = i; uIdx = i + 1; break;
+      }
+      const g = t.match(/^(\d[\d,]*(?:\.\d+)?)([^\d\s]{1,2})$/);
+      if (g && STEEL_UNIT_RE.test(g[2])) { qIdx = i; uIdx = i; glued = g; break; }
+    }
+    if (qIdx < 1 || uIdx < 0) continue;
+    const qty = safeFloat2(glued ? glued[1] : toks[qIdx], 0);
+    if (!(qty > 0)) continue;
+    const unitStr = glued ? glued[2] : toks[uIdx];
+    const middle = toks.slice(1, qIdx);                 // 名称 + 规格
+    if (!middle.length) continue;
+    let ni = 0;
+    while (ni < middle.length && !/\d/.test(middle[ni])) ni++;   // 名称 = 开头不含数字的部分
+    let name = middle.slice(0, ni).join('');
+    if (!name) name = (middle[0].match(/[\u4e00-\u9fff]+/) || [''])[0];
+    const spec = normSteelSpec(middle.slice(ni).join(' '));
+    // 尾部：送货单为备注（如 `20支`）；形式发票为「单价 总价」
+    const rest = toks.slice(uIdx + 1).filter((t) => t);
+    let price = 0;
+    if (docType === 'pi') {
+      const nums = rest.filter((t) => STEEL_NUM_RE.test(t)).map((t) => safeFloat2(t, 0)).filter((v) => v > 0);
+      if (nums.length) price = nums[0];
+    }
+    products.push({
+      '货物名称': matchProductName(name)[0] || name,
+      '规格': spec ? (fuzzyMatchSpec(spec) || spec) : '',
+      '规格原文': spec,
+      '单位': correctUnit(unitStr)[0] || '吨',
+      '数量': Math.round(qty * 10000) / 10000,
+      '单价': price,
+    });
+    lastSeq = seq;
+  }
+  return products;
+}
+// 【兜底】块解析：字段逐行版式（序号行 / 名称行 / 规格行 / 数量行 / 单位行 ...）
+export function parseSteelBlockRows(text, docType = 'delivery') {
+  const lines = text.split('\n').map((l) => l.replace(/\u3000/g, ' ').trim());
+  // 序号行：从 1 起严格递增的整数（避免把数量行/单价行误判成序号）
+  const seqIdx = [];
+  let expect = 1;
+  for (let i = 0; i < lines.length; i++) {
+    const t = lines[i].replace(/\s/g, '');
+    if (!STEEL_INT_RE.test(t)) continue;
+    const v = parseInt(t, 10);
+    if (v === 0 || v > 150) continue;
+    if (v === expect) { seqIdx.push(i); expect = v + 1; }
+  }
+  if (!seqIdx.length) return [];
+  const products = [];
+  for (let k = 0; k < seqIdx.length; k++) {
+    const s0 = seqIdx[k] + 1;
+    const e0 = k + 1 < seqIdx.length ? seqIdx[k + 1] : lines.length;
+    const block = lines.slice(s0, e0).filter((l) => l);
+    let unitIdx = -1;
+    for (let i = 0; i < block.length; i++) {
+      if (STEEL_UNIT_RE.test(block[i].replace(/\s/g, ''))) { unitIdx = i; break; }
+    }
+    if (unitIdx < 0) continue;                       // 块内没有单位行 → 不是有效明细块
+    let name = '', qty = 0;
+    const specs = [];
+    for (let i = 0; i < unitIdx; i++) {
+      const l = block[i];
+      const lc = l.replace(/\s/g, '');
+      if (STEEL_NUM_RE.test(lc)) { const v = parseFloat(lc.replace(/,/g, '')); if (v > 0) qty = v; continue; }
+      if (STEEL_SIZE_RE.test(l)) { specs.push(normSteelSpec(l)); continue; }
+      if (!name && /[\u4e00-\u9fff]/.test(l)) name = lc;
+    }
+    if (qty <= 0) continue;
+    const unit = correctUnit(block[unitIdx].replace(/\s/g, ''))[0];
+    let price = 0;
+    if (docType === 'pi') {
+      const nums = block.slice(unitIdx + 1)
+        .map((l) => l.replace(/\s/g, ''))
+        .filter((l) => STEEL_NUM_RE.test(l))
+        .map((l) => parseFloat(l.replace(/,/g, '')));
+      if (nums.length) price = nums[0];
+    }
+    const specText = specs.join('；');
+    products.push({
+      '货物名称': matchProductName(name)[0] || name,
+      '规格': specText ? fuzzyMatchSpec(specText) : '',
+      '规格原文': specText,
+      '单位': unit || '吨',
+      '数量': Math.round(qty * 10000) / 10000,
+      '单价': price,
+    });
+  }
+  return products;
+}
+export function parseSteelRows(text, docType = 'delivery') {
+  if (!text || !STEEL_KW.test(text)) return [];
+  const byLine = parseSteelLineRows(text, docType);   // 浏览器真实版式：单行表格行
+  if (byLine.length) return byLine;
+  return parseSteelBlockRows(text, docType);          // 兜底：字段逐行版式
+}
 export function parseRebarRows(text, docType = 'delivery') {
   const products = [];
   let lastKey = null, lastIdx = -100;
@@ -518,6 +656,12 @@ export function parseProductsFromText(text, docType) {
     if (CABLE_KW.test(text)) {
       const cable = parseCableRows(text, docType);
       if (cable.length) return cable;
+    }
+    // ✅ 型材/板材（方矩管/槽钢/角钢/钢板等）：字段逐行、规格为 * 尺寸串
+    // （必须在 parseRebarRows 之前，避免 20*2000*6000 里的数字被钢筋规则误吞）
+    if (STEEL_KW.test(text)) {
+      const steel = parseSteelRows(text, docType);
+      if (steel.length) return steel;
     }
     const rebar = parseRebarRows(text, docType);
     if (rebar.length) return rebar;

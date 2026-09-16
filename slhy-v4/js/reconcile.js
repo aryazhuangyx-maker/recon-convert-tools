@@ -1,7 +1,7 @@
 // reconcile.js — app.py _build_reconcile_groups 直译（三流核对引擎）
-import { fuzzyMatchSpec, specsMatch, isCableSpec, parseSpec, productsMatch, normalizeProductName } from './mapping.js?v=20260826q';
-import { normContractNo, fuzzyContractNoMatch } from './contract-no.js?v=20260826q';
-import { matchProductName } from './whitelist.js?v=20260826q';
+import { fuzzyMatchSpec, specsMatch, isCableSpec, parseSpec, productsMatch, normalizeProductName } from './mapping.js?v=20260915e';
+import { normContractNo, fuzzyContractNoMatch } from './contract-no.js?v=20260915e';
+import { matchProductName } from './whitelist.js?v=20260915e';
 export function safeFloat(val, def = 0.0) {
   if (typeof val === 'string') val = val.replace(/,/g, '').replace(/，/g, '').trim();
   if (val === null || val === undefined || val === '' || val === 'nan') return def;
@@ -72,11 +72,12 @@ export function buildReconcileGroups({ ledger = {}, deliveryLines = [], piLines 
   function buildLine(cl, d, p, result, reasons, totals) {
     const _totals = totals || {};
     let _dnFlag = null;
-    const _dn = String((d || {}).送货单编号 || '').trim();
+    const _dnList = ((d || {}).送货单编号_全部 || (String((d || {}).送货单编号 || '').trim() ? [String(d.送货单编号)] : [])).map((x) => String(x).trim()).filter(Boolean);
     const _piDnNos = ((p || {}).送货单编号_全部 || []).map((x) => String(x).trim()).filter(Boolean);
-    if (d && p && _dn && _piDnNos.length) {
-      const _dnNorm = _dn.toUpperCase().replace(/ /g, '').replace(/\\/g, '/');
-      _dnFlag = _piDnNos.some((x) => _dnNorm === x.toUpperCase().replace(/ /g, '').replace(/\\/g, '/'));
+    if (d && p && _dnList.length && _piDnNos.length) {
+      const _nf = (x) => x.toUpperCase().replace(/ /g, '').replace(/\\/g, '/');
+      const _piSet = new Set(_piDnNos.map(_nf));
+      _dnFlag = _dnList.map(_nf).every((x) => _piSet.has(x));
       reasons.push(_dnFlag ? '送货单编号和形式发票编号匹配' : '送货单编号与发票不对应');
     }
     if (p !== null && p !== undefined) {
@@ -178,92 +179,129 @@ export function buildReconcileGroups({ ledger = {}, deliveryLines = [], piLines 
       else if (result === '未识别') { summary.error += 1; summary.unrecognized = (summary.unrecognized || 0) + 1; }
       else summary.error += 1;
     };
-    for (const cl of cLines) {
+    // ── 按台账行做精确匹配（规格严格匹配；钢筋区间规格走 rangeLineMatch）──
+    const usedD2 = usedD, usedP2 = usedP;
+    const slots = cLines.map((cl) => {
       const parsed = parseSpec(String(cl.规格 || ''));
-      if (parsed && parsed.is_range) {
-        const cq = safeFloat(cl.数量, 0);
-        const dIdxList = [];
-        for (let i = 0; i < dLines.length; i++) { if (usedD.has(i)) continue; if (rangeLineMatch(dLines[i], cl, parsed.min, parsed.max)) { dIdxList.push(i); usedD.add(i); } }
-        const pIdxList = [];
-        for (let j = 0; j < pLines.length; j++) { if (usedP.has(j)) continue; if (rangeLineMatch(pLines[j], cl, parsed.min, parsed.max)) { pIdxList.push(j); usedP.add(j); } }
-        const totalD = dIdxList.reduce((s, i) => s + safeFloat(dLines[i].数量, 0), 0);
-        const totalP = pIdxList.reduce((s, j) => s + safeFloat(pLines[j].数量, 0), 0);
-        const totals = { d_sum: Math.round(totalD * 1000) / 1000, p_sum: Math.round(totalP * 1000) / 1000 };
-        if (!dIdxList.length) {
-          if (!pIdxList.length) emit(cl, null, null, '未发货', ['合同有此货物，但无对应送货单'], totals);
-          else for (const j of pIdxList) emit(cl, null, pLines[j], '核对有误', ['发票有，但无对应送货单'], totals);
-        } else {
-          const classReasons = [];
-          if (!pIdxList.length) classReasons.push('送货单有，但形式发票缺失');
-          else if (Math.abs(totalD - totalP) > QTY_TOL) classReasons.push('数量不一致：送货合计 ' + totalD.toFixed(3) + ' ≠ 发票合计 ' + totalP.toFixed(3));
-          if (totalD > cq + 1e-9) classReasons.push('数量超合同：送货合计 ' + totalD.toFixed(3) + ' > 合同 ' + cq.toFixed(3));
-          if (totalP > cq + 1e-9) classReasons.push('数量超合同：发票合计 ' + totalP.toFixed(3) + ' > 合同 ' + cq.toFixed(3));
-          const classResult = classReasons.length ? '核对有误' : '核对无误';
-          if (!classReasons.length && (dIdxList.length || pIdxList.length)) classReasons.push('合计 ' + (Math.round(Math.max(totalD, totalP) * 1000) / 1000).toFixed(3) + ' ≤ 合同 ' + cq.toFixed(3) + '，分批发货');
-          const dItems = dIdxList.map((i) => [i, safeFloat(dLines[i].数量, 0)]).sort((x, y) => y[1] - x[1]);
-          const pItems = pIdxList.map((j) => [j, safeFloat(pLines[j].数量, 0)]).sort((x, y) => y[1] - x[1]);
-          const usedPInner = new Set();
-          const pairRange = (di, dqty) => {
-            for (const [j, pqty] of pItems) { if (usedPInner.has(j)) continue; if (Math.abs(pqty - dqty) < QTY_TOL) { usedPInner.add(j); return [pLines[j], pqty]; } }
-            return [null, null];
-          };
-          for (const [di, dqty] of dItems) {
-            const [p, pqty] = pairRange(di, dqty);
-            const reasons = [...classReasons];
-            if (p && Math.abs(dqty - pqty) > QTY_TOL) reasons.push('数量不一致：送货 ' + dqty.toFixed(3) + ' ≠ 发票 ' + pqty.toFixed(3));
-            emit(cl, dLines[di], p, classResult, reasons, totals);
-          }
-          for (const [j, pqty] of pItems) { if (!usedPInner.has(j)) emit(cl, null, pLines[j], '核对有误', [...classReasons, '发票数量无对应送货单'], totals); }
-        }
-        continue;
-      }
+      const isRange = !!(parsed && parsed.is_range);
       const ts = fuzzyMatchSpec(String(cl.规格 || ''));
-      const cq = safeFloat(cl.数量, 0);
-      const dIdxList = [];
-      for (let i = 0; i < dLines.length; i++) { if (usedD.has(i)) continue; if (specsMatch(ts, fuzzyMatchSpec(String(dLines[i].规格 || '')))) { dIdxList.push(i); usedD.add(i); } }
-      const pIdxList = [];
-      for (let j = 0; j < pLines.length; j++) { if (usedP.has(j)) continue; if (specsMatch(ts, fuzzyMatchSpec(String(pLines[j].规格 || '')))) { pIdxList.push(j); usedP.add(j); } }
-      const totalD = dIdxList.reduce((s, i) => s + safeFloat(dLines[i].数量, 0), 0);
-      const totalP = pIdxList.reduce((s, j) => s + safeFloat(pLines[j].数量, 0), 0);
-      const totals = { d_sum: Math.round(totalD * 1000) / 1000, p_sum: Math.round(totalP * 1000) / 1000 };
-      if (!dIdxList.length) {
-        if (!pIdxList.length) emit(cl, null, null, '未发货', ['合同有此货物，但无对应送货单'], totals);
-        else for (const j of pIdxList) emit(cl, null, pLines[j], '核对有误', ['发票有，但无对应送货单'], totals);
-      } else if (!pIdxList.length) {
-        for (const di of dIdxList) emit(cl, dLines[di], null, '核对有误', ['送货单有，但形式发票缺失'], totals);
-      } else {
-        const dItems = dIdxList.map((i) => [i, safeFloat(dLines[i].数量, 0)]).sort((x, y) => y[1] - x[1]);
-        const pItems = pIdxList.map((j) => [j, safeFloat(pLines[j].数量, 0)]).sort((x, y) => y[1] - x[1]);
-        const usedPInner = new Set();
-        const pairOne = (di, dqty) => {
-          for (const [j, pqty] of pItems) { if (usedPInner.has(j)) continue; if (Math.abs(pqty - dqty) < QTY_TOL) { usedPInner.add(j); return [pLines[j], pqty]; } }
-          return [null, null];
-        };
-        for (const [di, dqty] of dItems) {
-          const [p, pqty] = pairOne(di, dqty);
-          const d = dLines[di];
-          const reasons = [];
-          if (!nameEq(cl.货物名称 || '', d.货物名称 || '')) reasons.push('货物名称不一致');
-          if (p) {
-            if (!nameEq(cl.货物名称 || '', p.货物名称 || '')) reasons.push('货物名称不一致');
-            if (Math.abs(dqty - pqty) > QTY_TOL) reasons.push('数量不一致：送货 ' + dqty.toFixed(3) + ' ≠ 发票 ' + pqty.toFixed(3));
-          }
-          const result = reasons.some((r) => r.includes('未识别')) ? '未识别' : (reasons.length ? '核对有误' : '核对无误');
-          emit(cl, d, p, result, reasons, totals);
-        }
-        for (const [j, pqty] of pItems) { if (!usedPInner.has(j)) emit(cl, null, pLines[j], '核对有误', ['发票数量无对应送货单'], totals); }
+      const slot = { cl, ts, dIdx: [], pIdx: [], dFuzzy: [], pFuzzy: [] };
+      for (let i = 0; i < dLines.length; i++) {
+        if (usedD2.has(i)) continue;
+        const ok = isRange ? rangeLineMatch(dLines[i], cl, parsed.min, parsed.max)
+                           : specsMatch(ts, fuzzyMatchSpec(String(dLines[i].规格 || '')));
+        if (ok) { slot.dIdx.push(i); usedD2.add(i); }
       }
+      for (let j = 0; j < pLines.length; j++) {
+        if (usedP2.has(j)) continue;
+        const ok = isRange ? rangeLineMatch(pLines[j], cl, parsed.min, parsed.max)
+                           : specsMatch(ts, fuzzyMatchSpec(String(pLines[j].规格 || '')));
+        if (ok) { slot.pIdx.push(j); usedP2.add(j); }
+      }
+      return slot;
+    });
+    // ── 台账外行归并：确保「表格行数 = 台账行数」，不再出现合同列为空的额外行 ──
+    // 规则：品类相同 + 尺寸串近似 → 并入最接近的台账行，并在说明里标注规格不一致
+    const gUnassigned = [];
+    function gDimTuples(spec) {
+      const out = [];
+      const re = /\d+(?:\.\d+)?(?:\s*\*\s*\d+(?:\.\d+)?)+/g;
+      let m;
+      while ((m = re.exec(String(spec || ''))) !== null) {
+        const t = m[0].split('*').map((x) => parseFloat(x.trim())).filter((v) => !Number.isNaN(v));
+        if (t.length >= 2) out.push(t);
+      }
+      return out;
+    }
+    function gTupleScore(a, b) {
+      if (a.length !== b.length) return 0;
+      let same = true, diff = 0;
+      for (let k = 0; k < a.length; k++) { if (a[k] !== b[k]) same = false; diff += Math.abs(a[k] - b[k]); }
+      if (same) return 100;
+      if (a[0] === b[0]) return Math.max(25, 60 - Math.min(35, diff / 20));
+      return Math.max(3, 20 - Math.min(17, diff / 50));
+    }
+    function gSpecSimilarity(a, b) {
+      const ta = gDimTuples(a), tb = gDimTuples(b);
+      let best = 0;
+      for (const x of ta) for (const y of tb) best = Math.max(best, gTupleScore(x, y));
+      return best;
+    }
+    function gBestSlot(line) {
+      const spec = String(line.规格原文 || line.规格 || '');
+      let best = null, bestScore = 0;
+      for (const s of slots) {
+        const dimScore = gSpecSimilarity(spec, String(s.cl.规格原文 || s.cl.规格 || ''));
+        if (dimScore <= 0) continue;
+        // 尺寸串相似度为主，品类相同只作同分时的微小加权（避免品类加权盖过精确尺寸匹配）
+        const score = dimScore + (line.货物名称 && s.cl.货物名称 && nameEq(String(s.cl.货物名称), String(line.货物名称)) ? 5 : 0);
+        if (score > bestScore) { best = s; bestScore = score; }
+      }
+      return best;
     }
     for (let i = 0; i < dLines.length; i++) {
-      if (usedD.has(i)) continue;
-      const [, p] = findMatch(dLines[i].规格 || '', pLines, usedP);
-      emit(null, dLines[i], p, '核对有误', ['送货单规格在合同中不存在']);
+      if (usedD2.has(i)) continue;
+      const s = gBestSlot(dLines[i]);
+      if (s) { s.dIdx.push(i); s.dFuzzy.push(i); }
+      else gUnassigned.push({ kind: '送货单', 货物名称: dLines[i].货物名称 || '', 规格: dLines[i].规格原文 || dLines[i].规格 || '', 数量: dLines[i].数量 || 0, 单位: dLines[i].单位 || '' });
     }
     for (let j = 0; j < pLines.length; j++) {
-      if (usedP.has(j)) continue;
-      emit(null, null, pLines[j], '核对有误', ['形式发票规格在合同中不存在']);
+      if (usedP2.has(j)) continue;
+      const s = gBestSlot(pLines[j]);
+      if (s) { s.pIdx.push(j); s.pFuzzy.push(j); }
+      else gUnassigned.push({ kind: '形式发票', 货物名称: pLines[j].货物名称 || '', 规格: pLines[j].规格原文 || pLines[j].规格 || '', 数量: pLines[j].数量 || 0, 单位: pLines[j].单位 || '' });
     }
-    groups.push({ '合约编号': dispCno(contractKey, cLines), matched: true, group_cno: cno, 'contract_合约编号': dispCno(contractKey, cLines), 'delivery_合约编号': dispCno(cno, dLines), 'pi_合约编号': dispCno(cno, pLines), lines: linesOut });
+    const gR3 = (x) => Math.round(x * 1000) / 1000;
+    const gUniq = (arr) => [...new Set(arr.map((x) => String(x || '').trim()).filter(Boolean))];
+    const gSpecs = (idxs, src) => gUniq(idxs.map((i) => String(src[i].规格原文 || src[i].规格 || '')));
+    const emitSlot = (slot) => {
+      const cl = slot.cl;
+      const cq = safeFloat(cl.数量, 0);
+      const cSpec = String(cl.规格原文 || cl.规格 || '');
+      const totalD = gR3(slot.dIdx.reduce((s, i) => s + safeFloat(dLines[i].数量, 0), 0));
+      const totalP = gR3(slot.pIdx.reduce((s, j) => s + safeFloat(pLines[j].数量, 0), 0));
+      const dFirst = slot.dIdx.length ? dLines[slot.dIdx[0]] : null;
+      const pFirst = slot.pIdx.length ? pLines[slot.pIdx[0]] : null;
+      const dDn = gUniq(slot.dIdx.map((i) => dLines[i].送货单编号));
+      const pDn = gUniq(slot.pIdx.map((j) => pLines[j].送货单编号));
+      const pNo = gUniq(slot.pIdx.map((j) => pLines[j].发票编号));
+      const dAgg = dFirst ? {
+        '货物名称': dFirst.货物名称 || '', '规格': dFirst.规格 || '', '规格原文': dFirst.规格原文 || dFirst.规格 || '',
+        '数量': totalD, '单位': dFirst.单位 || '', '送货单编号': dDn.join('、'), '送货单编号_全部': dDn,
+      } : null;
+      const pAgg = pFirst ? {
+        '货物名称': pFirst.货物名称 || '', '规格': pFirst.规格 || '', '规格原文': pFirst.规格原文 || pFirst.规格 || '',
+        '数量': totalP, '单位': pFirst.单位 || '', '单价': pFirst.单价 || 0,
+        '发票编号': pNo.join('、'), '送货单编号': pDn.join('、'), '送货单编号_全部': pDn,
+      } : null;
+      const hard = [];
+      if ((dFirst && !nameEq(cl.货物名称 || '', dFirst.货物名称 || '')) || (pFirst && !nameEq(cl.货物名称 || '', pFirst.货物名称 || ''))) {
+        hard.push('货物名称不一致');
+      }
+      const dFz = gSpecs(slot.dFuzzy, dLines).filter((s) => s !== cSpec);
+      const pFz = gSpecs(slot.pFuzzy, pLines).filter((s) => s !== cSpec);
+      if (dFz.length) hard.push('送货单规格与台账不一致：' + dFz.join(' / ') + ' ≠ 合同 ' + cSpec);
+      if (pFz.length) hard.push('发票规格与台账不一致：' + pFz.join(' / ') + ' ≠ 合同 ' + cSpec);
+      let result;
+      if (!dAgg && !pAgg) { result = '未发货'; hard.push('合同有此货物，但无对应送货单'); }
+      else if (!dAgg) { result = '核对有误'; hard.push('发票有，但无对应送货单'); }
+      else if (!pAgg) { result = '核对有误'; hard.push('送货单有，但形式发票缺失'); }
+      else {
+        if (Math.abs(totalD - totalP) > QTY_TOL) hard.push('数量不一致：送货合计 ' + totalD.toFixed(3) + ' ≠ 发票合计 ' + totalP.toFixed(3));
+        if (totalD > cq + 1e-9) hard.push('数量超合同：送货合计 ' + totalD.toFixed(3) + ' > 合同 ' + cq.toFixed(3));
+        if (totalP > cq + 1e-9) hard.push('数量超合同：发票合计 ' + totalP.toFixed(3) + ' > 合同 ' + cq.toFixed(3));
+        result = hard.length ? '核对有误' : '核对无误';
+      }
+      const reasons = [...hard];
+      if (result === '核对无误' && (slot.dIdx.length > 1 || slot.pIdx.length > 1)) {
+        reasons.push('分批发货：合计 ' + gR3(Math.max(totalD, totalP)).toFixed(3) + ' ≤ 合同 ' + cq.toFixed(3));
+      }
+      if (slot.dIdx.length > 1) reasons.push('送货单共 ' + slot.dIdx.length + ' 行，合计 ' + totalD.toFixed(3) + ' ' + (cl.单位 || ''));
+      if (slot.pIdx.length > 1) reasons.push('形式发票共 ' + slot.pIdx.length + ' 行，合计 ' + totalP.toFixed(3) + ' ' + (cl.单位 || ''));
+      emit(cl, dAgg, pAgg, result, reasons, { d_sum: totalD, p_sum: totalP });
+    };
+    for (const slot of slots) emitSlot(slot);
+    groups.push({ '合约编号': dispCno(contractKey, cLines), matched: true, group_cno: cno, 'contract_合约编号': dispCno(contractKey, cLines), 'delivery_合约编号': dispCno(cno, dLines), 'pi_合约编号': dispCno(cno, pLines), lines: linesOut, unmatched_extra: gUnassigned, unmatched_extra_n: gUnassigned.length });
   }
   summary.total = summary.ok + summary.not_shipped + summary.error;
   return { groups, new_contracts: newContracts, summary };

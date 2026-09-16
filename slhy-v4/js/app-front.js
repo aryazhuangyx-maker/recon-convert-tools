@@ -1,7 +1,7 @@
 /**
  * 内销开票核对工具 — 前端交互逻辑
  */
-import { getSession, clearSession } from './storage.js?v=20260826q';
+import { getSession, clearSession } from './storage.js?v=20260915e';
 
 const MAX_FILES = 10;
 let sessionId = null;
@@ -700,8 +700,11 @@ function renderReconcile(data) {
     const pCno = g.pi_合约编号 || '（无）';
     const matchTag = (g.contract_合约编号 && g.delivery_合约编号 && _normCno(g.contract_合约编号) === _normCno(g.delivery_合约编号))
       ? '' : ' ⚠ 编号不完全一致';
+    const extraTag = g.unmatched_extra_n
+      ? ` <span style="color:#b45309;background:#fff7e6;border:1px solid #fcd34d;border-radius:6px;padding:1px 6px;margin-left:6px;font-size:0.75rem">⚠ 另有 ${g.unmatched_extra_n} 行送货单/发票在台账中找不到对应规格</span>`
+      : '';
     return `<tr class="group-header-row" data-gidx="${gIdx}"><th colspan="24" style="text-align:left;padding:0.7rem 1rem;font-size:0.8rem">
-      <span style="display:inline-flex;align-items:center;gap:8px"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M7 2h10v4H7zM5 6h14v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2z"/></svg> 合约编号 — 合同：<code>${esc(cCno)}</code> ｜ 送货单：<code>${esc(dCno)}</code> ｜ 形式发票：<code>${esc(pCno)}</code>${matchTag}</span>
+      <span style="display:inline-flex;align-items:center;gap:8px"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M7 2h10v4H7zM5 6h14v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2z"/></svg> 合约编号 — 合同：<code>${esc(cCno)}</code> ｜ 送货单：<code>${esc(dCno)}</code> ｜ 形式发票：<code>${esc(pCno)}</code>${matchTag}${extraTag}</span>
       <button class="btn btn-outline-primary btn-sm" style="margin-left:1rem;font-size:0.8rem" onclick="openContractPicker(${gIdx})"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:3px"><path d="M12 3v18M3 12h18"/></svg>更换合约</button>
     </th></tr>`;
   }).join('');

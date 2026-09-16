@@ -1,8 +1,18 @@
 // contract-no.js — app.py _extract_contract_no / _norm_contract_no / _fuzzy_contract_no_match 直译
-import { toSimp } from './mapping.js?v=20260826q';
+import { toSimp } from './mapping.js?v=20260915e';
+// 字符统一：清零宽字符 → 全角/兼容字符转半角(NFKC) → 各类横线/破折号统一为半角连字符
+// 解决 OCR 把 "GDHL-SC(26)-041" 认成 "GDHL—SC（26）—041" 导致提取/匹配失败的问题
+const _DASH_RE = /[\u2010\u2011\u2012\u2013\u2014\u2015\u2212\u2500\u30FC\uFF0D\uFE58\uFE63\u2043]/g;
+const _ZW_RE = /[\u200B-\u200F\u202A-\u202E\uFEFF]/g;
+export function unifyContractChars(s) {
+  if (!s) return '';
+  s = String(s).replace(_ZW_RE, '');
+  try { s = s.normalize('NFKC'); } catch (e) { /* 环境不支持则跳过 */ }
+  return s.replace(_DASH_RE, '-');
+}
 export function extractContractNo(text) {
   if (!text) return [];
-  const norm = text.replace(/ /g, '').replace(/\u3000/g, '');
+  const norm = unifyContractChars(text).replace(/ /g, '').replace(/\u3000/g, '');
   const found = [];
   const KW = [['客户合约编号', 0], ['客户合約編號', 0],
               ['合约编号', 1], ['合約編號', 1], ['合同编号', 1],
@@ -26,6 +36,8 @@ export function extractContractNo(text) {
   const regexes = [
     [1, /WZ\[\d{4}\][\u4e00-\u9fff\-\u2010]*\d+(?:-\d+)*/g],
     [1, /JMHL-SC\(\d{2}\)-\d+/g],
+    // 通用合约编号式：字母前缀-字母段(年份)-序号（如 GDHL-SC(26)-041、XXHL-SC(26)-001）
+    [1, /[A-Z]{2,10}-[A-Z]{1,8}\(\d{2,4}\)-\d{1,6}/g],
     [1, /S\/GAB\/\S+/g],
     [1, /P\/GAB\/\S+/g],
   ];
@@ -57,7 +69,8 @@ export function extractContractNo(text) {
 }
 export function normContractNo(s) {
   if (!s) return '';
-  s = String(s).trim().replace(/\u3000/g, ' ');
+  s = unifyContractChars(String(s).trim());
+  s = s.replace(/\u3000/g, ' ');
   s = toSimp(s);
   s = s.replace(/／/g, '/').replace(/＼/g, '/');
   s = s.replace(/\s+/g, '').toUpperCase();

@@ -1,10 +1,10 @@
 // ocr-doc.js — 文档级识别编排
-import { fuzzyMatchSpec } from './mapping.js?v=20260826q';
-import { safeFloat } from './reconcile.js?v=20260826q';
-import { parseProductsFromText } from './parse-lines-v4.js?v=20260826q';
-import { applyWhitelistConstraints } from './whitelist.js?v=20260826q';
-import { extractContractNo } from './contract-no.js?v=20260826q';
-import { extractHybrid } from './extract.js?v=20260826q';
+import { fuzzyMatchSpec } from './mapping.js?v=20260915e';
+import { safeFloat } from './reconcile.js?v=20260915e';
+import { parseProductsFromText } from './parse-lines-v4.js?v=20260915e';
+import { applyWhitelistConstraints } from './whitelist.js?v=20260915e';
+import { extractContractNo } from './contract-no.js?v=20260915e';
+import { extractHybrid } from './extract.js?v=20260915e';
 export function isGenericSpec(spec) {
   if (!spec) return true;
   return !/[YTΦφ]\d|\d\s*mm/.test(String(spec));

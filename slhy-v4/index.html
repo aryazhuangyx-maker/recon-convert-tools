@@ -12,7 +12,7 @@
 // 兜底：fetch 失败时若 localStorage 中残留旧版标记与页面内嵌硬编码版本不一致，强制 reload 一次（防旧缓存自锁）
 (function() {
   var KEY = 'slhy_v4_ver';
-  var PAGE_VER = '20260826q'; // 与 version.json 同步；升版时一并更新
+  var PAGE_VER = '20260915e'; // 与 version.json 同步；升版时一并更新
   function reloadOnce() {
     try { caches && caches.keys && caches.keys().then(function(ks) { ks.forEach(function(k) { caches.delete(k); }); }); } catch(e) {}
     location.reload(true);
@@ -633,10 +633,10 @@ alert('✅ 上传成功！已加载 '+cnt+' 个合同，台账名称：'+nm);})
 window._uploadMappingFile=null;
 })();
 </script>
-<script src="vendor/bootstrap.bundle.min.js?v=20260826q"></script>
-<script src="vendor/xlsx.full.min.js?v=20260826q"></script>
-<script src="vendor/tesseract.min.js?v=20260826q"></script>
-<script type="module" src="js/app-front.js?v=20260826q"></script>
+<script src="vendor/bootstrap.bundle.min.js?v=20260915e"></script>
+<script src="vendor/xlsx.full.min.js?v=20260915e"></script>
+<script src="vendor/tesseract.min.js?v=20260915e"></script>
+<script type="module" src="js/app-front.js?v=20260915e"></script>
 
 <!-- 手动选合同弹窗 -->
 <div class="modal fade" id="contract-picker-modal" tabindex="-1">
